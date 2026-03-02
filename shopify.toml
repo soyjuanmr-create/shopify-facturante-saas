@@ -4,7 +4,7 @@ application_url = "{{ SHOPIFY_APP_URL }}"
 embedded = true
 
 [access_scopes]
-scopes = "read_orders,write_orders,read_all_orders"
+scopes = "read_orders,write_orders"
 
 [auth]
 redirect_urls = ["{{ SHOPIFY_APP_URL }}/api/auth/callback"]

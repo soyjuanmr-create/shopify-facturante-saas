@@ -7,7 +7,7 @@ const prisma = require('../models/prisma');
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET,
-  scopes: (process.env.SCOPES || 'read_orders,write_orders,read_all_orders').split(','),
+  scopes: (process.env.SCOPES || 'read_orders,write_orders').split(','),
   hostName: (process.env.SHOPIFY_APP_URL || 'localhost:3000').replace(/https?:\/\//, ''),
   hostScheme: 'https',
   apiVersion: ApiVersion.January25,
