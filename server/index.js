@@ -16,6 +16,7 @@ var printRoutes = require('./routes/print');
 var webhookRoutes = require('./routes/webhooks');
 
 var app = express();
+app.set('trust proxy', 1);
 var PORT = process.env.PORT || 3000;
 
 app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.shopify.com"], styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.shopify.com"], imgSrc: ["'self'", "data:", "https:", "http:"], connectSrc: ["'self'", "https://*.myshopify.com", "https://*.shopify.com"], frameSrc: ["'self'", "https://*.myshopify.com", "https://admin.shopify.com"], frameAncestors: ["https://admin.shopify.com", "https://*.myshopify.com"] } }, crossOriginEmbedderPolicy: false }));
