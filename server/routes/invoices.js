@@ -11,7 +11,24 @@ router.get('/orders', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
-    const session = { shop: shop.shopDomain, accessToken: shop.accessToken };
+
+    let accessToken = shop.accessToken;
+
+    // Si el token está vacío, buscarlo en la tabla Session del SDK de Shopify
+    if (!accessToken) {
+      const sessionRecord = await prisma.session.findFirst({
+        where: { shop: req.shopDomain, isOnline: false },
+        orderBy: { expires: 'desc' },
+      });
+      if (sessionRecord && sessionRecord.accessToken) {
+        accessToken = sessionRecord.accessToken;
+        await prisma.shop.update({ where: { shopDomain: req.shopDomain }, data: { accessToken } });
+      }
+    }
+
+    if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
+
+    const session = { shop: shop.shopDomain, accessToken };
     const client = new shopify.clients.Graphql({ session });
     const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt financialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
     const graphqlOrders = response.data.orders.edges.map(function (e) { return e.node; });
