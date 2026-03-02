@@ -49,8 +49,51 @@ router.post('/shopify/app-uninstalled', async (req, res) => {
 });
 
 router.post('/shopify', async (req, res) => {
-  logger.info('GDPR webhook: ' + req.headers['x-shopify-topic']);
+  var hmac = req.headers['x-shopify-hmac-sha256'];
+  if (!verifyHmac(req.body, hmac)) return res.status(401).send('Unauthorized');
+
+  var topic = req.headers['x-shopify-topic'];
+  var shopDomain = req.headers['x-shopify-shop-domain'];
+  var payload = JSON.parse(req.body.toString());
+
+  // Respond immediately — Shopify requires < 5s response
   res.status(200).json({ received: true });
+
+  try {
+    if (topic === 'customers/redact') {
+      // Anonymize customer PII from invoices for specific orders
+      var ordersToRedact = (payload.orders_to_redact || []).map(String);
+      if (ordersToRedact.length > 0) {
+        await prisma.invoice.updateMany({
+          where: { shopifyOrderId: { in: ordersToRedact } },
+          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null }
+        });
+      } else if (payload.customer && payload.customer.email) {
+        await prisma.invoice.updateMany({
+          where: { customerEmail: payload.customer.email },
+          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null }
+        });
+      }
+      logger.info('customers/redact processed for ' + shopDomain);
+
+    } else if (topic === 'shop/redact') {
+      // Delete all shop data 48h after uninstall
+      var shop = await prisma.shop.findUnique({ where: { shopDomain: shopDomain } });
+      if (shop) {
+        await prisma.invoice.deleteMany({ where: { shopId: shop.id } });
+        await prisma.session.deleteMany({ where: { shop: shopDomain } });
+        await prisma.shop.delete({ where: { shopDomain: shopDomain } });
+      }
+      logger.info('shop/redact processed for ' + shopDomain);
+
+    } else if (topic === 'customers/data_request') {
+      // This app stores: customerName, customerEmail on Invoice records
+      // No external transmission required — acknowledge receipt only
+      logger.info('customers/data_request received for ' + shopDomain);
+    }
+  } catch (error) {
+    logger.error('GDPR webhook error (' + topic + '): ' + error.message);
+  }
 });
 
 router.post('/facturante', express.json(), async (req, res) => {
