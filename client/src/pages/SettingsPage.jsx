@@ -84,7 +84,7 @@ export default function SettingsPage() {
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
         orig.current = { empresa: body.empresa, usuario: body.usuario, hash: hash, puntoVenta: body.puntoVenta, autoInvoice: autoInvoice };
-        setDirty(false); shopify.toast.show('Configuracion guardada');
+        setDirty(false); if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch, empresa, usuario, hash, puntoVenta, autoInvoice]);
@@ -95,7 +95,7 @@ export default function SettingsPage() {
       await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
       setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
       orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
-      shopify.toast.show('Desconectado');
+      if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch]);
 

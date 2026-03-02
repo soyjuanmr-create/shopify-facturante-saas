@@ -23,7 +23,7 @@ export default function OrdersPage() {
     var id = confirmId; setConfirmId(null); setInvoicingId(id); setError(null); setSuccess(null);
     try {
       var d = await fetch('/api/invoices/generate', { method: 'POST', body: JSON.stringify({ orderId: id }) });
-      if (d.success) { setSuccess(d.message); shopify.toast.show(d.message); await loadOrders(); }
+      if (d.success) { setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); await loadOrders(); }
       else setError(d.error || 'Error');
     } catch (e) { setError(e.message); } finally { setInvoicingId(null); }
   }, [fetch, confirmId, loadOrders]);
