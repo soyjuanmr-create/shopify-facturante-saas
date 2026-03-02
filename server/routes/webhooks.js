@@ -5,6 +5,7 @@ const prisma = require('../models/prisma');
 const FacturanteMapper = require('../utils/facturanteMapper');
 const FacturanteService = require('../services/facturante');
 const logger = require('../utils/logger');
+const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
 
 function verifyHmac(rawBody, signature) {
   var secret = process.env.SHOPIFY_API_SECRET;
@@ -104,13 +105,30 @@ router.post('/facturante', express.json(), async (req, res) => {
     var numero = data.NumeroComprobante || data.Numero;
     var estado = (data.Estado || data.estado || '').toLowerCase();
     if (!idComprobante) return res.status(200).json({ status: 'ignored' });
-    var invoice = await prisma.invoice.findFirst({ where: { facturanteInvoiceId: idComprobante.toString() } });
+    var invoice = await prisma.invoice.findFirst({
+      where: { facturanteInvoiceId: idComprobante.toString() },
+      include: { shop: true },
+    });
     if (!invoice) return res.status(200).json({ status: 'not_found' });
+
+    var session = { shop: invoice.shop.shopDomain, accessToken: invoice.shop.accessToken };
+
     if (estado === 'autorizado' && cae) {
-      await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'completed', facturanteInvoiceNumber: numero ? numero.toString() : null, cae: cae.toString(), processedAt: new Date() } });
+      var caeStr = cae.toString();
+      var numStr = numero ? numero.toString() : null;
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: 'completed', facturanteInvoiceNumber: numStr, cae: caeStr, processedAt: new Date() },
+      });
+      await setInvoiceMetafields(session, invoice.shopifyOrderId, {
+        status: 'completed', cae: caeStr, invoiceNumber: numStr,
+      });
     } else {
       var errorMsg = (data.Errores || []).join(', ') || data.Mensaje || 'Rechazado';
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: errorMsg } });
+      await setInvoiceMetafields(session, invoice.shopifyOrderId, {
+        status: 'failed', error: errorMsg,
+      });
     }
     res.status(200).json({ status: 'processed' });
   } catch (error) { logger.error('Facturante webhook error: ' + error.message); res.status(200).json({ status: 'error' }); }
