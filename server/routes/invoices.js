@@ -72,7 +72,6 @@ router.post('/generate', async (req, res) => {
       create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'processing', facturanteInvoiceId: resultado.idComprobante ? resultado.idComprobante.toString() : null, invoiceData: facturaData },
     });
     // Write processing status to order metafield so merchant can see it in admin
-    const session = { shop: shop.shopDomain, accessToken: shop.accessToken };
     await setInvoiceMetafields(session, orderId, { status: 'processing' });
     res.json({ success: true, message: 'Comprobante enviado a AFIP (ID: ' + resultado.idComprobante + ')' });
   } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
