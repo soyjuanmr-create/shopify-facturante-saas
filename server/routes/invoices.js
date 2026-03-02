@@ -14,16 +14,16 @@ router.get('/orders', async (req, res) => {
     const session = { shop: shop.shopDomain, accessToken: shop.accessToken };
     const client = new shopify.clients.Graphql({ session });
     const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt financialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
-    const graphqlOrders = response.data.orders.edges.map(function(e) { return e.node; });
-    const orderIds = graphqlOrders.map(function(o) { return o.id.split('/').pop(); });
+    const graphqlOrders = response.data.orders.edges.map(function (e) { return e.node; });
+    const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
     const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } } });
-    const orders = graphqlOrders.map(function(order) {
+    const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
-      var inv = localInvoices.find(function(i) { return i.shopifyOrderId === shortId; });
+      var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
       return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null };
     });
     res.json({ orders: orders });
-  } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: 'Error cargando pedidos' }); }
+  } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: error.message }); }
 });
 
 router.get('/stats', async (req, res) => {
@@ -60,7 +60,7 @@ router.post('/generate', async (req, res) => {
       total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
       billing_address: { first_name: ba.firstName, last_name: ba.lastName, address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
       note_attributes: gqlOrder.noteAttributes,
-      line_items: gqlOrder.lineItems.edges.map(function(e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: n.originalUnitPriceSet.presentmentMoney.amount, total_discount: n.totalDiscountSet.presentmentMoney.amount, tax_lines: n.taxLines }; }),
+      line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: n.originalUnitPriceSet.presentmentMoney.amount, total_discount: n.totalDiscountSet.presentmentMoney.amount, tax_lines: n.taxLines }; }),
     };
     const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
