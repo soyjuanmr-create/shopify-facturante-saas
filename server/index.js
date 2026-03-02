@@ -31,30 +31,33 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/api/', rateLimiter);
 
-app.get('/api/auth', async function(req, res) {
+app.get('/api/auth', async function (req, res) {
   var shop = req.query.shop;
   if (!shop) return res.status(400).send('Missing shop parameter');
   await shopify.auth.begin({ shop: shop, callbackPath: '/api/auth/callback', isOnline: false, rawRequest: req, rawResponse: res });
 });
 
-app.get('/api/auth/callback', async function(req, res) {
+app.get('/api/auth/callback', async function (req, res) {
   try {
     var callback = await shopify.auth.callback({ rawRequest: req, rawResponse: res });
     var session = callback.session;
+    logger.info('OAuth callback: shop=' + session.shop + ' token=' + (session.accessToken ? 'OK' : 'EMPTY'));
     var prisma = require('./models/prisma');
     await prisma.shop.upsert({
       where: { shopDomain: session.shop },
       update: { accessToken: session.accessToken, status: 'active', lastAccessAt: new Date() },
       create: { shopDomain: session.shop, accessToken: session.accessToken, status: 'active' },
     });
+    logger.info('OAuth callback: Shop upserted in DB for ' + session.shop);
     try { await shopify.webhooks.register({ session: session }); } catch (e) { logger.warn('Webhook reg error: ' + e.message); }
-    var billingCheck = await shopify.billing.check({ session: session, plans: ['SaaS Plan'], isTest: process.env.NODE_ENV !== 'production' });
-    if (!billingCheck.hasActivePayment) {
-      var billingUrl = await shopify.billing.request({ session: session, plan: 'SaaS Plan', isTest: process.env.NODE_ENV !== 'production' });
-      return res.redirect(billingUrl.confirmationUrl);
-    }
+    // Billing temporalmente desactivado para pruebas
+    // var billingCheck = await shopify.billing.check({ session: session, plans: ['SaaS Plan'], isTest: process.env.NODE_ENV !== 'production' });
+    // if (!billingCheck.hasActivePayment) {
+    //   var billingUrl = await shopify.billing.request({ session: session, plan: 'SaaS Plan', isTest: process.env.NODE_ENV !== 'production' });
+    //   return res.redirect(billingUrl.confirmationUrl);
+    // }
     res.redirect('/?shop=' + session.shop + '&host=' + req.query.host);
-  } catch (error) { logger.error('OAuth error: ' + error.message); res.status(500).send('Auth error'); }
+  } catch (error) { logger.error('OAuth error: ' + error.message); res.status(500).send('Auth error: ' + error.message); }
 });
 
 app.use('/api/settings', authMw.verifyToken, settingsRoutes);
@@ -64,7 +67,7 @@ app.use('/api/print', printRoutes);
 var distPath = path.join(__dirname, '../client/dist');
 app.use(express.static(distPath, { index: false }));
 
-app.get('/*', function(req, res) {
+app.get('/*', function (req, res) {
   var indexPath = path.join(distPath, 'index.html');
   var fs = require('fs');
   if (fs.existsSync(indexPath)) {
@@ -75,5 +78,5 @@ app.get('/*', function(req, res) {
 });
 
 app.use(errorHandler);
-app.listen(PORT, function() { logger.info('Shopifac running on port ' + PORT); });
+app.listen(PORT, function () { logger.info('Shopifac running on port ' + PORT); });
 module.exports = app;
