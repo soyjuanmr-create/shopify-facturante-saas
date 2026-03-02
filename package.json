@@ -7,10 +7,11 @@
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "nodemon server/index.js",
     "client:dev": "cd client && npm run dev",
-    "build": "cd client && npm install && npm run build",
-    "start": "node server/index.js",
+    "build": "npx prisma generate && cd client && npm install && npm run build",
+    "start": "npx prisma migrate deploy && node server/index.js",
     "shopify": "shopify app dev",
-    "deploy": "shopify app deploy"
+    "deploy": "shopify app deploy",
+    "prisma:deploy": "npx prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
