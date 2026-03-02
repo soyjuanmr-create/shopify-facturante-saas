@@ -1,0 +1,10 @@
+﻿api_version = "2025-01"
+
+[[extensions]]
+name = "t:name"
+handle = "shopifac-generate-invoice"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/ActionExtension.jsx"
+target = "admin.order-details.action.render"

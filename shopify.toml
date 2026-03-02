@@ -1,0 +1,28 @@
+name = "Shopifac"
+client_id = "{{ SHOPIFY_API_KEY }}"
+application_url = "{{ SHOPIFY_APP_URL }}"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,write_orders,read_all_orders"
+
+[auth]
+redirect_urls = ["{{ SHOPIFY_APP_URL }}/api/auth/callback"]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/paid"]
+  uri = "/webhooks/shopify/order-paid"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/webhooks/shopify/app-uninstalled"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/shopify"
+
+[pos]
+embedded = false

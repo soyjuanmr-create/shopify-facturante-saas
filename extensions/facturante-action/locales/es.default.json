@@ -1,0 +1,1 @@
+﻿{"name":"Generar Factura - Shopifac","title":"Generar factura electronica","description":"Se emitira un comprobante electronico a traves de AFIP.","generating":"Generando...","success":"Comprobante enviado a AFIP.","error":"Error al generar factura.","generate":"Generar factura","cancel":"Cancelar"}

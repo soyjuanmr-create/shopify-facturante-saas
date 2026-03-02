@@ -1,0 +1,32 @@
+﻿# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Dependencies
+node_modules/
+client/node_modules/
+extensions/*/node_modules/
+
+# Build output
+client/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Shopify CLI
+.shopify/
+
+# Prisma (generated, not source)
+# prisma/migrations/ → SÍ se trackea (contiene el historial de migraciones)

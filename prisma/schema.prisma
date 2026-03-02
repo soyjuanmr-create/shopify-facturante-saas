@@ -1,0 +1,62 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String?
+  userId      BigInt?
+  firstName   String?
+  lastName    String?
+  email       String?
+  accountOwner Boolean  @default(false)
+  locale      String?
+  collaborator Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+}
+
+model Shop {
+  id            String    @id @default(cuid())
+  shopDomain    String    @unique
+  accessToken   String
+  status        String    @default("active")
+  empresa       String?
+  usuario       String?
+  hash          String?
+  puntoVenta    String?   @default("1")
+  autoInvoice   Boolean   @default(false)
+  lastAccessAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  invoices      Invoice[]
+}
+
+model Invoice {
+  id                      String    @id @default(cuid())
+  shopId                  String
+  shop                    Shop      @relation(fields: [shopId], references: [id])
+  shopifyOrderId          String    @unique
+  shopifyOrderNumber      String
+  customerName            String?
+  customerEmail           String?
+  totalAmount             Float
+  status                  String    @default("pending")
+  facturanteInvoiceId     String?
+  facturanteInvoiceNumber String?
+  cae                     String?
+  errorMessage            String?
+  invoiceData             Json?
+  processedAt             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
