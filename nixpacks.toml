@@ -1,0 +1,14 @@
+[phases.install]
+cmds = [
+  'npm install',
+  'cd client && npm install'
+]
+
+[phases.build]
+cmds = [
+  'cd client && npm run build',
+  'npx prisma generate'
+]
+
+[start]
+cmd = 'node server/index.js'
