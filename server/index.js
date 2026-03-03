@@ -7,9 +7,6 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
 });
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received — process staying alive');
-});
 
 // Verificar variables requeridas antes de iniciar
 const required = ['SHOPIFY_API_KEY', 'SHOPIFY_API_SECRET', 'SHOPIFY_APP_URL', 'DATABASE_URL'];
