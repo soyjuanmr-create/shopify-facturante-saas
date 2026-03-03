@@ -1,6 +1,11 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "npm run build && npx prisma db push --skip-generate --accept-data-loss"
+  },
   "deploy": {
-    "startCommand": "npm start"
+    "startCommand": "node server/index.js",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 120
   }
 }

@@ -1,13 +1,14 @@
 ﻿require('dotenv').config();
 
-// Capturar errores silenciosos que matan el proceso
+// Capturar errores silenciosos sin matar el proceso
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION:', reason);
-  process.exit(1);
+  console.error('UNHANDLED REJECTION (server continues):', reason);
 });
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
-  process.exit(1);
+});
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received — process staying alive');
 });
 
 // Verificar variables requeridas antes de iniciar
