@@ -1,5 +1,15 @@
 ﻿require('dotenv').config();
 
+// Capturar errores silenciosos que matan el proceso
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
+  process.exit(1);
+});
+
 // Verificar variables requeridas antes de iniciar
 const required = ['SHOPIFY_API_KEY', 'SHOPIFY_API_SECRET', 'SHOPIFY_APP_URL', 'DATABASE_URL'];
 const missing = required.filter(k => !process.env[k]);
@@ -88,5 +98,9 @@ app.get('/*', function (req, res) {
 });
 
 app.use(errorHandler);
-app.listen(PORT, function () { logger.info('Shopifac running on port ' + PORT); });
+console.log('Attempting to start server on port', PORT);
+app.listen(PORT, function () {
+  console.log('SERVER STARTED - Shopifac running on port ' + PORT);
+  logger.info('Shopifac running on port ' + PORT);
+});
 module.exports = app;
