@@ -1,4 +1,13 @@
 ﻿require('dotenv').config();
+
+// Verificar variables requeridas antes de iniciar
+const required = ['SHOPIFY_API_KEY', 'SHOPIFY_API_SECRET', 'SHOPIFY_APP_URL', 'DATABASE_URL'];
+const missing = required.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error('FATAL: Missing required environment variables:', missing.join(', '));
+  process.exit(1);
+}
+console.log('ENV CHECK OK - DATABASE_URL starts with:', process.env.DATABASE_URL.substring(0, 30));
 var express = require('express');
 var path = require('path');
 var helmet = require('helmet');
