@@ -8,7 +8,7 @@
     "server:dev": "nodemon server/index.js",
     "client:dev": "cd client && npm run dev",
     "build": "npx prisma generate && cd client && npm install && npm run build",
-    "start": "node server/index.js",
+    "start": "npx prisma db push --skip-generate --accept-data-loss && node server/index.js",
     "shopify": "shopify app dev",
     "deploy": "shopify app deploy",
     "prisma:deploy": "npx prisma migrate deploy"
