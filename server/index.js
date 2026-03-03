@@ -34,6 +34,7 @@ app.use('/api/', rateLimiter);
 app.get('/api/auth', async function (req, res) {
   var shop = req.query.shop;
   if (!shop) return res.status(400).send('Missing shop parameter');
+  if (!shop.includes('.myshopify.com')) shop = shop + '.myshopify.com';
   await shopify.auth.begin({ shop: shop, callbackPath: '/api/auth/callback', isOnline: false, rawRequest: req, rawResponse: res });
 });
 
