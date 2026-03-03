@@ -1,5 +1,18 @@
 ﻿const winston = require('winston');
 
+const transports = [
+  new winston.transports.Console({
+    format: winston.format.combine(winston.format.colorize(), winston.format.simple())
+  }),
+];
+
+if (process.env.NODE_ENV !== 'production') {
+  transports.push(
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' })
+  );
+}
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -8,16 +21,7 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   defaultMeta: { service: 'shopifac' },
-  transports: [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
+  transports,
 });
-
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(winston.format.colorize(), winston.format.simple())
-  }));
-}
 
 module.exports = logger;
