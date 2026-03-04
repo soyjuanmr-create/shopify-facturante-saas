@@ -101,15 +101,20 @@ router.post('/generate', async (req, res) => {
     const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
     const webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
-    const resultado = await facturante.crearComprobante(facturaData, webhookUrl);
+    let resultado2;
+    try { resultado2 = await facturante.crearComprobante(facturaData, webhookUrl); }
+    catch (fe) {
+      await prisma.invoice.upsert({ where: { shopifyOrderId: orderId.toString() }, update: { status: 'failed', errorMessage: fe.message }, create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'failed', errorMessage: fe.message, invoiceData: facturaData } });
+      logger.error('Generate invoice error: ' + fe.message);
+      return res.status(500).json({ error: fe.message });
+    }
     await prisma.invoice.upsert({
       where: { shopifyOrderId: orderId.toString() },
-      update: { status: 'processing', facturanteInvoiceId: resultado.idComprobante ? resultado.idComprobante.toString() : null },
-      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'processing', facturanteInvoiceId: resultado.idComprobante ? resultado.idComprobante.toString() : null, invoiceData: facturaData },
+      update: { status: 'processing', facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null },
+      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'processing', facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, invoiceData: facturaData },
     });
-    // Write processing status to order metafield so merchant can see it in admin
     await setInvoiceMetafields(session, orderId, { status: 'processing' });
-    res.json({ success: true, message: 'Comprobante enviado a Facturante (ID: ' + resultado.idComprobante + ')' });
+    res.json({ success: true, message: 'Comprobante enviado a Facturante (ID: ' + resultado2.idComprobante + ')' });
   } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
 });
 
