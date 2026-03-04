@@ -22,7 +22,7 @@ export default function OrdersPage() {
   // Auto-refresh while any order is processing (waiting for Facturante webhook)
   useEffect(() => {
     if (orders.some(o => o.facturacion_status === 'processing')) {
-      var t = setTimeout(loadOrders, 8000);
+      var t = setTimeout(loadOrders, 120000);
       return () => clearTimeout(t);
     }
   }, [orders, loadOrders]);
@@ -46,7 +46,7 @@ export default function OrdersPage() {
   if (loading) return (<Page title="Ordenes"><Layout><Layout.Section><Card><SkeletonBodyText lines={8} /></Card></Layout.Section></Layout></Page>);
 
   return (
-    <Page title="Ordenes" primaryAction={{ content: 'Actualizar', onAction: loadOrders }}>
+    <Page title="Ordenes">
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {success && <Banner title="Exito" tone="success" onDismiss={() => setSuccess(null)}><p>{success}</p></Banner>}
