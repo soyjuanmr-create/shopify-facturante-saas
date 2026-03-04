@@ -59,7 +59,7 @@ app.get('/api/auth/callback', async function (req, res) {
   try {
     var callback = await shopify.auth.callback({ rawRequest: req, rawResponse: res });
     var session = callback.session;
-    logger.info('OAuth callback: shop=' + session.shop + ' token=' + (session.accessToken ? 'OK' : 'EMPTY'));
+    logger.info('OAuth callback: shop=' + session.shop + ' token=' + (session.accessToken ? session.accessToken.substring(0, 12) : 'EMPTY') + ' scope=' + session.scope);
     var prisma = require('./models/prisma');
     await prisma.shop.upsert({
       where: { shopDomain: session.shop },

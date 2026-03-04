@@ -10,11 +10,19 @@ const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
 async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   const url = 'https://' + shopDomain + '/admin/api/2025-04/graphql.json';
   const body = variables ? { query, variables } : { query };
-  const resp = await axios.post(url, body, {
-    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-  });
-  if (resp.data.errors) throw new Error(resp.data.errors.map(function(e){return e.message;}).join(', '));
-  return resp.data;
+  try {
+    const resp = await axios.post(url, body, {
+      headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+    });
+    if (resp.data.errors) throw new Error(resp.data.errors.map(function(e){return e.message;}).join(', '));
+    return resp.data;
+  } catch (err) {
+    if (err.response) {
+      const detail = JSON.stringify(err.response.data);
+      throw new Error('Shopify ' + err.response.status + ' for ' + shopDomain + ' tok=' + (accessToken || '').substring(0, 12) + ': ' + detail);
+    }
+    throw err;
+  }
 }
 
 router.get('/orders', async (req, res) => {
