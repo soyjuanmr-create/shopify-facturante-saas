@@ -6,15 +6,21 @@
     var cliente = this.mapearCliente(shopifyOrder);
     var items = (shopifyOrder.line_items || []).map(function(item, idx) {
       var alicuota = FacturanteMapper._obtenerAlicuota(item, shopifyOrder);
+      var qty = parseInt(item.quantity, 10) || 1;
       var precioUnitario = parseFloat(item.price);
-      if (taxesIncluded && alicuota > 0) precioUnitario = precioUnitario / (1 + alicuota / 100);
+      var bonificacionTotal = parseFloat(item.total_discount) || 0;
+      if (taxesIncluded && alicuota > 0) {
+        var factor = 1 + alicuota / 100;
+        precioUnitario = precioUnitario / factor;
+        bonificacionTotal = bonificacionTotal / factor;
+      }
       return {
         codigo: item.sku || item.variant_id || 'PROD-' + idx,
         descripcion: item.name || item.title,
-        cantidad: parseInt(item.quantity, 10) || 1,
+        cantidad: qty,
         precio_unitario: precioUnitario.toFixed(3),
         alicuota_iva: alicuota,
-        bonificacion: (parseFloat(item.total_discount) / (parseInt(item.quantity, 10) || 1)).toFixed(3)
+        bonificacion: (bonificacionTotal / qty).toFixed(3)
       };
     });
     return { tipo_comprobante: tipoComprobante, shopify_order_number: shopifyOrder.order_number || shopifyOrder.name, importe_total: parseFloat(shopifyOrder.total_price).toFixed(2), cliente: cliente, items: items, observaciones: 'Orden Shopify #' + shopifyOrder.name };
