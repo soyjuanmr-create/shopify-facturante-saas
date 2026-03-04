@@ -23,6 +23,14 @@
         bonificacion: (bonificacionTotal / qty).toFixed(3)
       };
     });
+    (shopifyOrder.shipping_lines || []).forEach(function(sl) {
+      var shippingPrice = parseFloat(sl.price) || 0;
+      if (shippingPrice <= 0) return;
+      var shippingAlicuota = (sl.tax_lines && sl.tax_lines.length > 0) ? parseFloat(sl.tax_lines[0].rate) * 100 : 21.0;
+      var shippingPrecio = shippingPrice;
+      if (taxesIncluded && shippingAlicuota > 0) shippingPrecio = shippingPrecio / (1 + shippingAlicuota / 100);
+      items.push({ codigo: 'ENVIO', descripcion: (sl.title || 'Costo de envio').substring(0, 250), cantidad: 1, precio_unitario: shippingPrecio.toFixed(3), alicuota_iva: shippingAlicuota, bonificacion: '0.000' });
+    });
     return { tipo_comprobante: tipoComprobante, shopify_order_number: shopifyOrder.order_number || shopifyOrder.name, importe_total: parseFloat(shopifyOrder.total_price).toFixed(2), cliente: cliente, items: items, observaciones: 'Orden Shopify #' + shopifyOrder.name };
   }
 
