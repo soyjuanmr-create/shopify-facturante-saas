@@ -43,7 +43,7 @@ class FacturanteService {
 
   mapearTipoDocumento(tipo) {
     var t = (tipo || '').toUpperCase();
-    if (t === 'CUIT') return 80; if (t === 'CUIL') return 86; if (t === 'DNI') return 96; return 99;
+    if (t === 'CUIT') return 6; if (t === 'CUIL') return 7; if (t === 'DNI') return 1; return 13;
   }
 
   mapearTratamientoImpositivo(tipoComp, tipoDoc) {
