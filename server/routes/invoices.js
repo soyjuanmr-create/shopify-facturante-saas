@@ -30,7 +30,7 @@ router.get('/orders', async (req, res) => {
 
     const session = { shop: shop.shopDomain, accessToken };
     const client = new shopify.clients.Graphql({ session });
-    const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt financialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
+    const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
     const graphqlOrders = response.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
     const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } } });
