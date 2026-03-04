@@ -19,6 +19,14 @@ export default function OrdersPage() {
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
+  // Auto-refresh while any order is processing (waiting for Facturante webhook)
+  useEffect(() => {
+    if (orders.some(o => o.facturacion_status === 'processing')) {
+      var t = setTimeout(loadOrders, 8000);
+      return () => clearTimeout(t);
+    }
+  }, [orders, loadOrders]);
+
   const handleInvoice = useCallback(async () => {
     var id = confirmId; setConfirmId(null); setInvoicingId(id); setError(null); setSuccess(null);
     try {
