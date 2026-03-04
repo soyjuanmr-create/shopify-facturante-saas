@@ -53,10 +53,11 @@ class FacturanteService {
   formatearItems(items) {
     return items.map(function(item, idx) {
       var pu = Number(item.precio_unitario) || 0;
+      var bon = Number(item.bonificacion) || 0;
       var cant = Number(item.cantidad) || 1;
       var alic = Number(item.alicuota_iva) || 21;
-      var total = Math.round(pu * cant * (1 + alic / 100) * 1000) / 1000;
-      return { Codigo: (item.codigo || 'PROD' + (idx+1)).substring(0, 20), Detalle: (item.descripcion || 'Producto').substring(0, 250), Cantidad: cant, PrecioUnitario: pu.toFixed(3), Bonificacion: '0', IVA: alic.toFixed(3), Gravado: true, Total: total.toFixed(3) };
+      var total = Math.round((pu - bon) * cant * (1 + alic / 100) * 1000) / 1000;
+      return { Codigo: (item.codigo || 'PROD' + (idx+1)).substring(0, 20), Detalle: (item.descripcion || 'Producto').substring(0, 250), Cantidad: cant, PrecioUnitario: pu.toFixed(3), Bonificacion: bon.toFixed(3), IVA: alic.toFixed(3), Gravado: true, Total: total.toFixed(3) };
     });
   }
 
@@ -65,7 +66,7 @@ class FacturanteService {
     var cliente = facturaData.cliente || {};
     var items = this.formatearItems(facturaData.items || []);
     var totalFinal = items.reduce(function(a, i) { return a + Number(i.Total); }, 0);
-    var netoFinal = items.reduce(function(a, i) { return a + Number(i.PrecioUnitario) * Number(i.Cantidad); }, 0);
+    var netoFinal = items.reduce(function(a, i) { return a + (Number(i.PrecioUnitario) - Number(i.Bonificacion)) * Number(i.Cantidad); }, 0);
     var self = this;
     var itemsXml = items.map(function(i) {
       return '<fac2:ComprobanteItem><fac2:Bonificacion>' + i.Bonificacion + '</fac2:Bonificacion><fac2:Cantidad>' + i.Cantidad + '</fac2:Cantidad><fac2:Codigo>' + self._esc(i.Codigo) + '</fac2:Codigo><fac2:Detalle>' + self._esc(i.Detalle) + '</fac2:Detalle><fac2:Gravado>' + i.Gravado + '</fac2:Gravado><fac2:IVA>' + i.IVA + '</fac2:IVA><fac2:PrecioUnitario>' + i.PrecioUnitario + '</fac2:PrecioUnitario><fac2:Total>' + i.Total + '</fac2:Total></fac2:ComprobanteItem>';
