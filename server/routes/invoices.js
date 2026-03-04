@@ -49,7 +49,7 @@ router.get('/orders', async (req, res) => {
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null };
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders });
   } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: error.message }); }
