@@ -12,23 +12,20 @@ router.get('/orders', async (req, res) => {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
 
-    let accessToken = shop.accessToken;
+    // Siempre priorizar la Session table (gestionada por el SDK)
+    const sessionRecord = await prisma.session.findFirst({
+      where: { shop: req.shopDomain, isOnline: false },
+      orderBy: { expires: 'desc' },
+    });
+    const accessToken = (sessionRecord && sessionRecord.accessToken) ? sessionRecord.accessToken : shop.accessToken;
 
-    // Si el token está vacío, buscarlo en la tabla Session del SDK de Shopify
-    if (!accessToken) {
-      const sessionRecord = await prisma.session.findFirst({
-        where: { shop: req.shopDomain, isOnline: false },
-        orderBy: { expires: 'desc' },
-      });
-      if (sessionRecord && sessionRecord.accessToken) {
-        accessToken = sessionRecord.accessToken;
-        await prisma.shop.update({ where: { shopDomain: req.shopDomain }, data: { accessToken } });
-      }
-    }
+    logger.info('Orders: shop=' + req.shopDomain + ' sessionTable=' + (sessionRecord ? 'found,tok=' + (sessionRecord.accessToken || '').substring(0, 8) : 'NOT FOUND') + ' shopTable=tok=' + (shop.accessToken || '').substring(0, 8));
 
     if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
 
-    const session = { shop: shop.shopDomain, accessToken };
+    const { Session } = require('@shopify/shopify-api');
+    const session = new Session({ id: 'offline_' + shop.shopDomain, shop: shop.shopDomain, state: '', isOnline: false });
+    session.accessToken = accessToken;
     const client = new shopify.clients.Graphql({ session });
     const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
     const graphqlOrders = response.data.orders.edges.map(function (e) { return e.node; });
