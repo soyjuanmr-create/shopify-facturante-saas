@@ -40,7 +40,7 @@ export default function SettingsPage() {
     if (typeof shopify === 'undefined') return;
     var bar = document.getElementById('settings-bar');
     if (!bar) {
-      bar = document.createElement('s-save-bar'); bar.id = 'settings-bar';
+      bar = document.createElement('ui-save-bar'); bar.id = 'settings-bar';
       var save = document.createElement('button'); save.setAttribute('variant', 'primary'); save.textContent = 'Guardar';
       save.addEventListener('click', function() { document.dispatchEvent(new Event('shopifac:save')); });
       var discard = document.createElement('button'); discard.textContent = 'Descartar';
@@ -51,7 +51,11 @@ export default function SettingsPage() {
     function onDiscard() { document.dispatchEvent(new Event('shopifac:doDiscard')); }
     document.addEventListener('shopifac:save', onSave);
     document.addEventListener('shopifac:discard', onDiscard);
-    return function() { document.removeEventListener('shopifac:save', onSave); document.removeEventListener('shopifac:discard', onDiscard); };
+    return function() {
+      document.removeEventListener('shopifac:save', onSave);
+      document.removeEventListener('shopifac:discard', onDiscard);
+      if (shopify.saveBar) shopify.saveBar.hide('settings-bar');
+    };
   }, []);
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function SettingsPage() {
                   <TextField label="Nro de empresa" value={empresa} onChange={v => { setEmpresa(v); setFieldErrors(p => ({...p, empresa: undefined})); }} error={fieldErrors.empresa} autoComplete="off" helpText="Numero asignado por Facturante" />
                   <TextField label="Usuario" type="email" value={usuario} onChange={v => { setUsuario(v); setFieldErrors(p => ({...p, usuario: undefined})); }} error={fieldErrors.usuario} autoComplete="email" helpText="Email de Facturante.com" />
                   <TextField label="API Hash" type="password" value={hash} onChange={v => { setHash(v); setFieldErrors(p => ({...p, hash: undefined})); }} error={fieldErrors.hash} autoComplete="off" />
-                  <TextField label="Punto de venta" value={puntoVenta} onChange={v => setPuntoVenta(v)} autoComplete="off" helpText="Nro habilitado en AFIP" />
+                  <TextField label="Punto de venta" value={puntoVenta} onChange={v => setPuntoVenta(v)} autoComplete="off" helpText="Nro habilitado en Facturante" />
                 </FormLayout>
               </BlockStack>
             </Card>

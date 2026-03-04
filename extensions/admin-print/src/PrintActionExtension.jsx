@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "preact/hooks";
+﻿/** @jsxImportSource preact */
+import { useEffect, useState } from "preact/hooks";
 
 export default function PrintExt() {
   var i18n = shopify.i18n;

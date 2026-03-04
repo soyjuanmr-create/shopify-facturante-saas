@@ -42,7 +42,7 @@ export default function HomePage() {
             <BlockStack gap="200">
               <p>Configura tu cuenta de Facturante en 3 pasos:</p>
               <InlineStack gap="200" blockAlign="center"><Badge tone="info">1</Badge><Text as="span">Credenciales de Facturante.com</Text></InlineStack>
-              <InlineStack gap="200" blockAlign="center"><Badge tone="info">2</Badge><Text as="span">Punto de venta AFIP</Text></InlineStack>
+              <InlineStack gap="200" blockAlign="center"><Badge tone="info">2</Badge><Text as="span">Punto de venta Facturante</Text></InlineStack>
               <InlineStack gap="200" blockAlign="center"><Badge tone="info">3</Badge><Text as="span">Modo automatico o manual</Text></InlineStack>
             </BlockStack>
           </CalloutCard>

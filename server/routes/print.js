@@ -38,7 +38,7 @@ function invoicePage(order, invoice) {
       return '<tr><td>' + i.title + '</td><td>' + (i.sku||'-') + '</td><td class="c">' + i.quantity + '</td><td class="r">$' + p.toFixed(2) + '</td><td class="r">$' + (p*i.quantity).toFixed(2) + '</td></tr>';
     }).join('');
   }
-  var caeHtml = (invoice && invoice.cae) ? '<div class="cae"><b>CAE:</b> ' + invoice.cae + ' | <b>Nro:</b> ' + (invoice.facturanteInvoiceNumber||'-') + '</div>' : '<div class="cae"><em>Pendiente de autorizacion AFIP</em></div>';
+  var caeHtml = (invoice && invoice.cae) ? '<div class="cae"><b>CAE:</b> ' + invoice.cae + ' | <b>Nro:</b> ' + (invoice.facturanteInvoiceNumber||'-') + '</div>' : '<div class="cae"><em>Pendiente de procesamiento</em></div>';
   var sub = order && order.subtotalPriceSet ? parseFloat(order.subtotalPriceSet.shopMoney.amount).toFixed(2) : '0.00';
   var tax = order && order.totalTaxSet ? parseFloat(order.totalTaxSet.shopMoney.amount).toFixed(2) : '0.00';
   var tot = order && order.totalPriceSet ? parseFloat(order.totalPriceSet.shopMoney.amount).toFixed(2) : '0.00';

@@ -65,7 +65,7 @@ export default function OrdersPage() {
           )}
         </Card>
         <Modal open={!!confirmId} onClose={() => setConfirmId(null)} title="Confirmar facturacion" primaryAction={{ content: 'Generar factura', onAction: handleInvoice }} secondaryActions={[{ content: 'Cancelar', onAction: () => setConfirmId(null) }]}>
-          <Modal.Section><Text>Generar factura electronica AFIP para esta orden?</Text></Modal.Section>
+          <Modal.Section><Text>Generar factura electronica via Facturante para esta orden?</Text></Modal.Section>
         </Modal>
       </BlockStack>
     </Page>

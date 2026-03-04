@@ -1,0 +1,21 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "ddb03a81b1ffb2422828a5e3e5d8f177"
+name = "facturante-conector"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = true
+
+[webhooks]
+api_version = "2025-10"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_orders,write_orders,read_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://shopify-facturante.onrender.com" ]
+
+[app_preferences]
+url = "https://shopify-facturante.onrender.com/admin"

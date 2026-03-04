@@ -1,13 +1,13 @@
 name = "Shopifac"
-client_id = "{{ SHOPIFY_API_KEY }}"
-application_url = "{{ SHOPIFY_APP_URL }}"
+client_id = "974e44028d8fa5287c173836427343e8"
+application_url = "https://shopify-facturante-saas-production-d49a.up.railway.app"
 embedded = true
 
 [access_scopes]
 scopes = "read_orders,write_orders"
 
 [auth]
-redirect_urls = ["{{ SHOPIFY_APP_URL }}/api/auth/callback"]
+redirect_urls = ["https://shopify-facturante-saas-production-d49a.up.railway.app/api/auth/callback"]
 
 [webhooks]
 api_version = "2025-01"

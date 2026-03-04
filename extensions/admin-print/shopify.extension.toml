@@ -1,8 +1,9 @@
-﻿api_version = "2025-01"
+api_version = "2025-04"
 
 [[extensions]]
 name = "t:name"
 handle = "shopifac-print-invoice"
+uid = "215830ae-ee36-5292-d53b-8abbee9a38a1e4df136b"
 type = "ui_extension"
 
 [[extensions.targeting]]

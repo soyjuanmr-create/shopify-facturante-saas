@@ -108,7 +108,7 @@ router.post('/generate', async (req, res) => {
     });
     // Write processing status to order metafield so merchant can see it in admin
     await setInvoiceMetafields(session, orderId, { status: 'processing' });
-    res.json({ success: true, message: 'Comprobante enviado a AFIP (ID: ' + resultado.idComprobante + ')' });
+    res.json({ success: true, message: 'Comprobante enviado a Facturante (ID: ' + resultado.idComprobante + ')' });
   } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
 });
 
