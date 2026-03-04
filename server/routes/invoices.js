@@ -1,18 +1,28 @@
 ﻿const express = require('express');
 const router = express.Router();
 const prisma = require('../models/prisma');
-const shopify = require('../services/shopify');
+const axios = require('axios');
 const FacturanteMapper = require('../utils/facturanteMapper');
 const FacturanteService = require('../services/facturante');
 const logger = require('../utils/logger');
 const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
+
+async function shopifyGraphql(shopDomain, accessToken, query, variables) {
+  const url = 'https://' + shopDomain + '/admin/api/2025-04/graphql.json';
+  const body = variables ? { query, variables } : { query };
+  const resp = await axios.post(url, body, {
+    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+  });
+  if (resp.data.errors) throw new Error(resp.data.errors.map(function(e){return e.message;}).join(', '));
+  return resp.data;
+}
 
 router.get('/orders', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
 
-    // Siempre priorizar la Session table (gestionada por el SDK)
+    // Priorizar Session table; fallback a Shop table
     const sessionRecord = await prisma.session.findFirst({
       where: { shop: req.shopDomain, isOnline: false },
       orderBy: { expires: 'desc' },
@@ -23,12 +33,9 @@ router.get('/orders', async (req, res) => {
 
     if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
 
-    const { Session } = require('@shopify/shopify-api');
-    const session = new Session({ id: 'offline_' + shop.shopDomain, shop: shop.shopDomain, state: '', isOnline: false });
-    session.accessToken = accessToken;
-    const client = new shopify.clients.Graphql({ session });
-    const response = await client.request('{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }');
-    const graphqlOrders = response.data.orders.edges.map(function (e) { return e.node; });
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }';
+    const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
+    const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
     const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } } });
     const orders = graphqlOrders.map(function (order) {
@@ -63,10 +70,16 @@ router.post('/generate', async (req, res) => {
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
     const existing = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
     if (existing && existing.status === 'completed') return res.json({ success: true, message: 'Factura ya emitida. CAE: ' + existing.cae });
-    const session = { shop: shop.shopDomain, accessToken: shop.accessToken };
-    const client = new shopify.clients.Graphql({ session });
-    const response = await client.request('query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } noteAttributes { name value } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } taxLines { rate } } } } } }', { variables: { id: 'gid://shopify/Order/' + orderId } });
-    const gqlOrder = response.data ? response.data.order : null;
+    const sessionRecord2 = await prisma.session.findFirst({
+      where: { shop: shop.shopDomain, isOnline: false },
+      orderBy: { expires: 'desc' },
+    });
+    const accessToken2 = (sessionRecord2 && sessionRecord2.accessToken) ? sessionRecord2.accessToken : shop.accessToken;
+    if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
+    const session = { shop: shop.shopDomain, accessToken: accessToken2 };
+    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } noteAttributes { name value } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } taxLines { rate } } } } } }';
+    const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+    const gqlOrder = orderData.data ? orderData.data.order : null;
     if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
     const ba = gqlOrder.billingAddress || {};
     const orderForMapper = {

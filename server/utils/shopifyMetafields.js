@@ -1,4 +1,4 @@
-const shopify = require('../services/shopify');
+const axios = require('axios');
 const logger = require('./logger');
 
 const MUTATION = `
@@ -32,9 +32,11 @@ async function setInvoiceMetafields(session, orderId, data) {
       metafields.push({ ownerId, namespace: 'shopifac', key: 'invoice_error', type: 'single_line_text_field', value: data.error.substring(0, 255) });
     }
 
-    const client = new shopify.clients.Graphql({ session });
-    const result = await client.request(MUTATION, { variables: { metafields } });
-    const userErrors = result.data?.metafieldsSet?.userErrors || [];
+    const url = 'https://' + session.shop + '/admin/api/2025-04/graphql.json';
+    const resp = await axios.post(url, { query: MUTATION, variables: { metafields } }, {
+      headers: { 'X-Shopify-Access-Token': session.accessToken, 'Content-Type': 'application/json' },
+    });
+    const userErrors = resp.data?.data?.metafieldsSet?.userErrors || [];
     if (userErrors.length > 0) {
       logger.warn('Metafields userErrors for order ' + orderId + ': ' + JSON.stringify(userErrors));
     }
