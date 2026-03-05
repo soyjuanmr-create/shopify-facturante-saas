@@ -89,11 +89,9 @@ export default function OrdersPage() {
                   <IndexTable.Cell>
                     {o.facturacion_status === 'completed'
                       ? <Text tone="success" variant="bodySm">CAE: ...{o.cae ? o.cae.slice(-6) : ''}</Text>
-                      : o.facturacion_status === 'processing'
-                        ? null
-                        : <Button size="slim" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
-                            {o.facturacion_status === 'failed' ? 'Reintentar' : 'Facturar'}
-                          </Button>}
+                      : <Button size="slim" variant={o.facturacion_status === 'processing' ? 'plain' : 'secondary'} onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
+                          {o.facturacion_status === 'failed' ? 'Reintentar' : o.facturacion_status === 'processing' ? 'Reprocesar' : 'Facturar'}
+                        </Button>}
                   </IndexTable.Cell>
                 </IndexTable.Row>
               ))}
@@ -105,9 +103,20 @@ export default function OrdersPage() {
             <Button onClick={() => loadOrders(pageInfo.endCursor)} loading={loadingMore}>Ver mas ordenes</Button>
           </InlineStack>
         )}
-        <Modal open={!!confirmId} onClose={() => setConfirmId(null)} title="Confirmar facturacion" primaryAction={{ content: 'Generar factura', onAction: handleInvoice }} secondaryActions={[{ content: 'Cancelar', onAction: () => setConfirmId(null) }]}>
-          <Modal.Section><Text>Generar factura electronica via Facturante para esta orden?</Text></Modal.Section>
-        </Modal>
+        {(() => {
+          var confirmOrder = orders.find(o => o.id === confirmId);
+          var isReprocess = confirmOrder && confirmOrder.facturacion_status === 'processing';
+          return (
+            <Modal open={!!confirmId} onClose={() => setConfirmId(null)} title={isReprocess ? 'Reprocesar facturacion' : 'Confirmar facturacion'} primaryAction={{ content: isReprocess ? 'Reprocesar' : 'Generar factura', onAction: handleInvoice }} secondaryActions={[{ content: 'Cancelar', onAction: () => setConfirmId(null) }]}>
+              <Modal.Section>
+                <BlockStack gap="300">
+                  <Text>Generar factura electronica via Facturante para esta orden?</Text>
+                  {isReprocess && <Banner tone="warning"><p>Este comprobante fue enviado previamente. Asegurate de haber anulado el comprobante anterior en Facturante antes de continuar.</p></Banner>}
+                </BlockStack>
+              </Modal.Section>
+            </Modal>
+          );
+        })()}
       </BlockStack>
     </Page>
   );

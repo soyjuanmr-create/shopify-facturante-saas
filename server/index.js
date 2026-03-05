@@ -41,7 +41,9 @@ app.use(compression());
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 app.use(cors({ origin: true, credentials: true }));
 
-app.use('/webhooks', express.raw({ type: 'application/json' }));
+// Raw body only for Shopify webhooks (HMAC verification needs raw bytes)
+// Facturante webhook uses express.json() inline — do NOT apply raw here
+app.use('/webhooks/shopify', express.raw({ type: 'application/json' }));
 app.use('/webhooks', webhookRoutes);
 
 app.use(express.json());

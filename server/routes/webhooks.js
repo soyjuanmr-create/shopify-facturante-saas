@@ -99,7 +99,10 @@ router.post('/shopify', async (req, res) => {
 
 router.post('/facturante', express.json(), async (req, res) => {
   try {
+    // Handle case where body was parsed as Buffer (middleware conflict)
     var data = req.body;
+    if (Buffer.isBuffer(data)) { try { data = JSON.parse(data.toString()); } catch(e) { data = {}; } }
+    logger.info('Facturante webhook received: ' + JSON.stringify(data).substring(0, 500));
     var idComprobante = data.IdComprobante || data.idComprobante || data.id;
     var cae = data.CAE || data.cae;
     var numero = data.NumeroComprobante || data.Numero;
