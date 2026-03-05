@@ -14,7 +14,7 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
     const resp = await axios.post(url, body, {
       headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
     });
-    if (resp.data.errors) throw new Error(resp.data.errors.map(function(e){return e.message;}).join(', '));
+    if (resp.data.errors) throw new Error(resp.data.errors.map(function (e) { return e.message; }).join(', '));
     return resp.data;
   } catch (err) {
     if (err.response) {
@@ -87,7 +87,7 @@ router.post('/generate', async (req, res) => {
     const accessToken2 = (sessionRecord2 && sessionRecord2.accessToken) ? sessionRecord2.accessToken : shop.accessToken;
     if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
-    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } taxLines { rate } } } } } }';
+    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
     const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
     const gqlOrder = orderData.data ? orderData.data.order : null;
     if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
@@ -96,13 +96,13 @@ router.post('/generate', async (req, res) => {
       id: orderId, name: gqlOrder.name, order_number: gqlOrder.name, email: gqlOrder.email,
       total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
       billing_address: { first_name: ba.firstName, last_name: ba.lastName, address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
-      note_attributes: (gqlOrder.customAttributes || []).map(function(a) { return { name: a.key, value: a.value }; }),
-      line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: n.originalUnitPriceSet.presentmentMoney.amount, total_discount: n.totalDiscountSet.presentmentMoney.amount, tax_lines: n.taxLines }; }),
+      note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
+      line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
       shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
     };
-    logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function(i){ return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
+    logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
     const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
-    logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function(i){ return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
+    logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function (i) { return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
     const webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
     let resultado2;

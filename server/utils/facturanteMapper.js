@@ -4,11 +4,14 @@
     var taxesIncluded = shopifyOrder.taxes_included || false;
     var tipoComprobante = this.determinarTipoComprobante(shopifyOrder);
     var cliente = this.mapearCliente(shopifyOrder);
-    var items = (shopifyOrder.line_items || []).map(function(item, idx) {
+    var items = (shopifyOrder.line_items || []).map(function (item, idx) {
       var alicuota = FacturanteMapper._obtenerAlicuota(item, shopifyOrder);
       var qty = parseInt(item.quantity, 10) || 1;
       var originalPrice = parseFloat(item.price);
       var totalDiscountAmount = parseFloat(item.total_discount || 0);
+      if (totalDiscountAmount === 0 && item.discount_allocations && item.discount_allocations.length > 0) {
+        totalDiscountAmount = item.discount_allocations.reduce(function (sum, d) { return sum + parseFloat(d.amount || 0); }, 0);
+      }
       var totalOriginalLinePrice = originalPrice * qty;
       var discountPct = totalOriginalLinePrice > 0 ? (totalDiscountAmount / totalOriginalLinePrice) * 100 : 0;
       var precioUnitario = originalPrice;
@@ -24,7 +27,7 @@
         bonificacion: discountPct.toFixed(3)
       };
     });
-    (shopifyOrder.shipping_lines || []).forEach(function(sl) {
+    (shopifyOrder.shipping_lines || []).forEach(function (sl) {
       var shippingPrice = parseFloat(sl.price) || 0;
       if (shippingPrice <= 0) return;
       var shippingAlicuota = (sl.tax_lines && sl.tax_lines.length > 0) ? parseFloat(sl.tax_lines[0].rate) * 100 : 21.0;
@@ -69,7 +72,7 @@
   static _extraerAtributo(order, keys) {
     if (!order.note_attributes) return null;
     for (var k = 0; k < keys.length; k++) {
-      var attr = order.note_attributes.find(function(a) { return a.name.toUpperCase() === keys[k].toUpperCase(); });
+      var attr = order.note_attributes.find(function (a) { return a.name.toUpperCase() === keys[k].toUpperCase(); });
       if (attr && attr.value) return attr.value;
     }
     return null;
