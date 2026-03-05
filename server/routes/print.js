@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
       try {
         var session = { shop: invoice.shop.shopDomain, accessToken: invoice.shop.accessToken };
         var client = new shopify.clients.Graphql({ session: session });
-        var r = await client.request('query($id:ID!){order(id:$id){name createdAt email totalPriceSet{shopMoney{amount currencyCode}} subtotalPriceSet{shopMoney{amount}} totalTaxSet{shopMoney{amount}} billingAddress{firstName lastName company address1 city province zip} shippingAddress{firstName lastName company address1 city province zip country} lineItems(first:50){edges{node{title sku quantity originalUnitPriceSet{shopMoney{amount}}}}}}}', { variables: { id: 'gid://shopify/Order/' + shortId } });
+        var r = await client.request('query($id:ID!){order(id:$id){name createdAt email totalPriceSet{shopMoney{amount currencyCode}} subtotalPriceSet{shopMoney{amount}} totalTaxSet{shopMoney{amount}} billingAddress{firstName lastName company address1 city province zip} shippingAddress{firstName lastName company address1 city province zip country} lineItems(first:50){edges{node{title sku quantity originalUnitPriceSet{shopMoney{amount}} discountedUnitPriceSet{shopMoney{amount}}}}}}}', { variables: { id: 'gid://shopify/Order/' + shortId } });
         order = r.data ? r.data.order : null;
       } catch (e) { /* continue */ }
     }
@@ -34,7 +34,7 @@ function invoicePage(order, invoice) {
   var items = '';
   if (order && order.lineItems && order.lineItems.edges) {
     items = order.lineItems.edges.map(function(e) {
-      var i = e.node; var p = parseFloat(i.originalUnitPriceSet.shopMoney.amount);
+      var i = e.node; var p = parseFloat((i.discountedUnitPriceSet || i.originalUnitPriceSet).shopMoney.amount);
       return '<tr><td>' + i.title + '</td><td>' + (i.sku||'-') + '</td><td class="c">' + i.quantity + '</td><td class="r">$' + p.toFixed(2) + '</td><td class="r">$' + (p*i.quantity).toFixed(2) + '</td></tr>';
     }).join('');
   }

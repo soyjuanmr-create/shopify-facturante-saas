@@ -24,6 +24,14 @@ router.post('/shopify/order-paid', async (req, res) => {
     if (!shop) return;
     var existing = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderData.id.toString() } });
     if (existing) return;
+    // Normalize REST line items: compute discounted_unit_price from discount_allocations
+    // (REST payload has original price + discount_allocations, mapper uses discounted_unit_price)
+    orderData.line_items = (orderData.line_items || []).map(function(item) {
+      var totalDiscount = (item.discount_allocations || []).reduce(function(sum, d) { return sum + parseFloat(d.amount || 0); }, 0);
+      var qty = parseInt(item.quantity, 10) || 1;
+      item.discounted_unit_price = (parseFloat(item.price) - totalDiscount / qty).toString();
+      return item;
+    });
     var facturaData = FacturanteMapper.mapShopifyToFacturante(orderData);
     var status = 'pending', facturanteId = null, errorMsg = null;
     if (shop.autoInvoice && shop.hash && shop.empresa) {
