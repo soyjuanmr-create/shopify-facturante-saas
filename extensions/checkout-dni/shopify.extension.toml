@@ -1,0 +1,10 @@
+api_version = "2025-04"
+
+[[extensions]]
+name = "t:name"
+handle = "shopifac-checkout-dni"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/CheckoutDNI.jsx"
+target = "purchase.checkout.contact.render-after"
