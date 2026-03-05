@@ -8,9 +8,9 @@
       var alicuota = FacturanteMapper._obtenerAlicuota(item, shopifyOrder);
       var qty = parseInt(item.quantity, 10) || 1;
       var originalPrice = parseFloat(item.price);
-      var discountedPrice = parseFloat(item.discounted_unit_price != null && item.discounted_unit_price !== undefined ? item.discounted_unit_price : item.price);
-      // Bonificacion as percentage — Facturante's % Bonific. field
-      var discountPct = originalPrice > 0 ? Math.max(0, (1 - discountedPrice / originalPrice) * 100) : 0;
+      var totalDiscountAmount = parseFloat(item.total_discount || 0);
+      var totalOriginalLinePrice = originalPrice * qty;
+      var discountPct = totalOriginalLinePrice > 0 ? (totalDiscountAmount / totalOriginalLinePrice) * 100 : 0;
       var precioUnitario = originalPrice;
       if (taxesIncluded && alicuota > 0) {
         precioUnitario = precioUnitario / (1 + alicuota / 100);
