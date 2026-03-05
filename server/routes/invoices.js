@@ -100,7 +100,9 @@ router.post('/generate', async (req, res) => {
       line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: n.originalUnitPriceSet.presentmentMoney.amount, discounted_unit_price: n.discountedUnitPriceSet.presentmentMoney.amount, tax_lines: n.taxLines }; }),
       shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
     };
+    logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function(i){ return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
     const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
+    logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function(i){ return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
     const webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
     let resultado2;
