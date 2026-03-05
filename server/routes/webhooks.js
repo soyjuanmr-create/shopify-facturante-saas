@@ -105,16 +105,35 @@ router.post('/shopify', async (req, res) => {
   }
 });
 
-router.post('/facturante', express.json(), async (req, res) => {
+function extractXmlTag(xml, tag) {
+  var match = xml.match(new RegExp('<[^>]*:?' + tag + '[^>]*>([^<]*)<'));
+  return match ? match[1].trim() : null;
+}
+
+router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
   try {
-    // Handle case where body was parsed as Buffer (middleware conflict)
-    var data = req.body;
-    if (Buffer.isBuffer(data)) { try { data = JSON.parse(data.toString()); } catch(e) { data = {}; } }
-    logger.info('Facturante webhook received: ' + JSON.stringify(data).substring(0, 500));
+    var raw = req.body ? req.body.toString() : '';
+    logger.info('Facturante webhook raw: ' + raw.substring(0, 500));
+
+    // Intentar parsear como JSON primero, luego como XML
+    var data = {};
+    try { data = JSON.parse(raw); } catch(e) {
+      // Extraer campos del XML
+      data = {
+        IdComprobante: extractXmlTag(raw, 'IdComprobante'),
+        CAE: extractXmlTag(raw, 'CAE'),
+        NumeroComprobante: extractXmlTag(raw, 'NumeroComprobante') || extractXmlTag(raw, 'Numero'),
+        Estado: extractXmlTag(raw, 'Estado'),
+        Mensaje: extractXmlTag(raw, 'Mensaje'),
+      };
+    }
+
     var idComprobante = data.IdComprobante || data.idComprobante || data.id;
     var cae = data.CAE || data.cae;
     var numero = data.NumeroComprobante || data.Numero;
     var estado = (data.Estado || data.estado || '').toLowerCase();
+    logger.info('Facturante webhook parsed: id=' + idComprobante + ' estado=' + estado + ' cae=' + cae);
+
     if (!idComprobante) return res.status(200).json({ status: 'ignored' });
     var invoice = await prisma.invoice.findFirst({
       where: { facturanteInvoiceId: idComprobante.toString() },
@@ -135,7 +154,8 @@ router.post('/facturante', express.json(), async (req, res) => {
         status: 'completed', cae: caeStr, invoiceNumber: numStr,
       });
     } else {
-      var errorMsg = (data.Errores || []).join(', ') || data.Mensaje || 'Rechazado';
+      var errores = Array.isArray(data.Errores) ? data.Errores.join(', ') : (extractXmlTag(raw, 'Errores') || '');
+      var errorMsg = errores || data.Mensaje || extractXmlTag(raw, 'Mensaje') || 'Rechazado';
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: errorMsg } });
       await setInvoiceMetafields(session, invoice.shopifyOrderId, {
         status: 'failed', error: errorMsg,
