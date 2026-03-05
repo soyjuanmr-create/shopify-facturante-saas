@@ -111,6 +111,11 @@ export default function OrdersPage() {
               <Modal.Section>
                 <BlockStack gap="300">
                   <Text>Generar factura electronica via Facturante para esta orden?</Text>
+                  {confirmOrder && confirmOrder.facturacion_status === 'failed' && (
+                    <Banner tone="warning">
+                      <p>Si el error fue por falta de documento: ingresa el CUIT o DNI del cliente en el campo <strong>Empresa</strong> del pedido en Shopify antes de reintentar.</p>
+                    </Banner>
+                  )}
                   {isReprocess && <Banner tone="warning"><p>Este comprobante fue enviado previamente. Asegurate de haber anulado el comprobante anterior en Facturante antes de continuar.</p></Banner>}
                 </BlockStack>
               </Modal.Section>
