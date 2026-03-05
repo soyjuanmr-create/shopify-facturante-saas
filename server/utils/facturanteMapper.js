@@ -8,11 +8,13 @@
       var alicuota = FacturanteMapper._obtenerAlicuota(item, shopifyOrder);
       var qty = parseInt(item.quantity, 10) || 1;
       var precioUnitario = parseFloat(item.price);
-      var bonificacionTotal = parseFloat(item.total_discount) || 0;
+      // discounted_unit_price is already per-unit — no division by qty needed
+      var discountedUnit = parseFloat(item.discounted_unit_price != null ? item.discounted_unit_price : item.price);
+      var bonificacionUnit = precioUnitario - discountedUnit;
       if (taxesIncluded && alicuota > 0) {
         var factor = 1 + alicuota / 100;
         precioUnitario = precioUnitario / factor;
-        bonificacionTotal = bonificacionTotal / factor;
+        bonificacionUnit = bonificacionUnit / factor;
       }
       return {
         codigo: item.sku || item.variant_id || 'PROD-' + idx,
@@ -20,7 +22,7 @@
         cantidad: qty,
         precio_unitario: precioUnitario.toFixed(3),
         alicuota_iva: alicuota,
-        bonificacion: (bonificacionTotal / qty).toFixed(3)
+        bonificacion: bonificacionUnit.toFixed(3)
       };
     });
     (shopifyOrder.shipping_lines || []).forEach(function(sl) {
