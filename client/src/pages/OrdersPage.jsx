@@ -1,21 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, Tooltip } from '@shopify/polaris';
+import { useState, useEffect, useCallback } from 'react';
+import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, InlineStack } from '@shopify/polaris';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
 export default function OrdersPage() {
   const fetch = useAuthFetch();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [invoicingId, setInvoicingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [search, setSearch] = useState('');
+  const [pageInfo, setPageInfo] = useState({ hasNextPage: false, endCursor: null });
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true); setError(null);
-    try { var d = await fetch('/api/invoices/orders'); setOrders(d.orders || []); }
-    catch (e) { setError(e.message); } finally { setLoading(false); }
+  const loadOrders = useCallback(async (cursor) => {
+    if (cursor) setLoadingMore(true); else { setLoading(true); setOrders([]); }
+    setError(null);
+    try {
+      var url = '/api/invoices/orders' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : '');
+      var d = await fetch(url);
+      setOrders(prev => cursor ? [...prev, ...(d.orders || [])] : (d.orders || []));
+      setPageInfo(d.pageInfo || { hasNextPage: false, endCursor: null });
+    } catch (e) { setError(e.message); } finally { setLoading(false); setLoadingMore(false); }
   }, [fetch]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
@@ -23,7 +30,7 @@ export default function OrdersPage() {
   // Auto-refresh while any order is processing (waiting for Facturante webhook)
   useEffect(() => {
     if (orders.some(o => o.facturacion_status === 'processing')) {
-      var t = setTimeout(loadOrders, 120000);
+      var t = setTimeout(() => loadOrders(), 120000);
       return () => clearTimeout(t);
     }
   }, [orders, loadOrders]);
@@ -32,7 +39,7 @@ export default function OrdersPage() {
     var id = confirmId; setConfirmId(null); setInvoicingId(id); setError(null); setSuccess(null);
     try {
       var d = await fetch('/api/invoices/generate', { method: 'POST', body: JSON.stringify({ orderId: id }) });
-      if (d.success) { setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); await loadOrders(); }
+      if (d.success) { setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); loadOrders(); }
       else setError(d.error || 'Error');
     } catch (e) { setError(e.message); } finally { setInvoicingId(null); }
   }, [fetch, confirmId, loadOrders]);
@@ -93,6 +100,11 @@ export default function OrdersPage() {
             </IndexTable>
           )}
         </Card>
+        {pageInfo.hasNextPage && !search && (
+          <InlineStack align="center">
+            <Button onClick={() => loadOrders(pageInfo.endCursor)} loading={loadingMore}>Ver mas ordenes</Button>
+          </InlineStack>
+        )}
         <Modal open={!!confirmId} onClose={() => setConfirmId(null)} title="Confirmar facturacion" primaryAction={{ content: 'Generar factura', onAction: handleInvoice }} secondaryActions={[{ content: 'Cancelar', onAction: () => setConfirmId(null) }]}>
           <Modal.Section><Text>Generar factura electronica via Facturante para esta orden?</Text></Modal.Section>
         </Modal>

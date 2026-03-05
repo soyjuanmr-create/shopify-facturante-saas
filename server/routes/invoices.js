@@ -41,7 +41,9 @@ router.get('/orders', async (req, res) => {
 
     if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
 
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid") { edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }';
+    const cursor = req.query.cursor || null;
+    const afterClause = cursor ? ', after: "' + cursor + '"' : '';
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }';
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
@@ -51,7 +53,7 @@ router.get('/orders', async (req, res) => {
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
       return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
-    res.json({ orders: orders });
+    res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
   } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: error.message }); }
 });
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, Layout, Card, FormLayout, TextField, Checkbox, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText } from '@shopify/polaris';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
@@ -8,13 +8,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
-  const [dirty, setDirty] = useState(false);
+
   const [empresa, setEmpresa] = useState('');
   const [usuario, setUsuario] = useState('');
   const [hash, setHash] = useState('');
   const [puntoVenta, setPuntoVenta] = useState('1');
   const [autoInvoice, setAutoInvoice] = useState(false);
-  const orig = useRef({});
+  const orig = useRef({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,7 +32,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     var d = empresa !== orig.current.empresa || usuario !== orig.current.usuario || hash !== orig.current.hash || puntoVenta !== orig.current.puntoVenta || autoInvoice !== orig.current.autoInvoice;
-    setDirty(d);
     if (typeof shopify !== 'undefined' && shopify.saveBar) { d ? shopify.saveBar.show('settings-bar') : shopify.saveBar.hide('settings-bar'); }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
@@ -88,7 +87,7 @@ export default function SettingsPage() {
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
         orig.current = { empresa: body.empresa, usuario: body.usuario, hash: hash, puntoVenta: body.puntoVenta, autoInvoice: autoInvoice };
-        setDirty(false); if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
+        if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch, empresa, usuario, hash, puntoVenta, autoInvoice]);
