@@ -112,14 +112,71 @@ router.post('/generate', async (req, res) => {
       logger.error('Generate invoice error: ' + fe.message);
       return res.status(500).json({ error: fe.message });
     }
+    var invoiceStatus = 'processing';
+    var invoiceCae = null;
+    var invoiceNumero = null;
+    if (resultado2.autorizado && resultado2.cae) {
+      invoiceStatus = 'completed';
+      invoiceCae = resultado2.cae.toString();
+      invoiceNumero = resultado2.numero ? resultado2.numero.toString() : null;
+    }
     await prisma.invoice.upsert({
       where: { shopifyOrderId: orderId.toString() },
-      update: { status: 'processing', facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null },
-      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'processing', facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, invoiceData: facturaData },
+      update: { status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null },
+      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
     });
-    await setInvoiceMetafields(session, orderId, { status: 'processing' });
-    res.json({ success: true, message: 'Comprobante enviado a Facturante (ID: ' + resultado2.idComprobante + ')' });
+    await setInvoiceMetafields(session, orderId, invoiceStatus === 'completed'
+      ? { status: 'completed', cae: invoiceCae, invoiceNumber: invoiceNumero }
+      : { status: 'processing' });
+    var msg2 = invoiceStatus === 'completed'
+      ? 'Factura emitida. CAE: ' + invoiceCae
+      : 'Comprobante enviado a Facturante (ID: ' + resultado2.idComprobante + '). Esperando autorizacion...';
+    res.json({ success: true, message: msg2, status: invoiceStatus });
   } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
+});
+
+// Endpoint de polling manual: consulta el estado real a Facturante y actualiza la BD
+// Util cuando el webhook de Facturante no llego y la orden quedo en "procesando"
+router.post('/sync-status/:orderId', async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
+    if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Credenciales de Facturante no configuradas.' });
+
+    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    if (!invoice) return res.status(404).json({ error: 'Factura no encontrada' });
+    if (invoice.status === 'completed') return res.json({ status: 'completed', cae: invoice.cae, message: 'Ya esta completada' });
+    if (!invoice.facturanteInvoiceId) return res.status(400).json({ error: 'No hay ID de comprobante para consultar' });
+
+    const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
+    const result = await facturante.consultarComprobante(invoice.facturanteInvoiceId);
+    logger.info('sync-status orderId=' + orderId + ' estado=' + result.estado + ' cae=' + result.cae);
+
+    const sessionRecord = await prisma.session.findFirst({
+      where: { shop: req.shopDomain, isOnline: false },
+      orderBy: { expires: 'desc' },
+    });
+    const accessToken = (sessionRecord && sessionRecord.accessToken) ? sessionRecord.accessToken : shop.accessToken;
+    const session = { shop: req.shopDomain, accessToken };
+
+    if (result.estado === 'autorizado' && result.cae) {
+      const caeStr = result.cae.toString();
+      const numStr = result.numero ? result.numero.toString() : null;
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: 'completed', cae: caeStr, facturanteInvoiceNumber: numStr, processedAt: new Date() },
+      });
+      await setInvoiceMetafields(session, orderId, { status: 'completed', cae: caeStr, invoiceNumber: numStr });
+      return res.json({ status: 'completed', cae: caeStr, invoiceNumber: numStr, message: 'Estado actualizado a completado' });
+    } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing') {
+      await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: result.mensaje || result.estado } });
+      await setInvoiceMetafields(session, orderId, { status: 'failed', error: result.mensaje || result.estado });
+      return res.json({ status: 'failed', message: result.mensaje, raw: result.raw });
+    }
+
+    res.json({ status: invoice.status, message: 'Aun en procesamiento en Facturante', facturanteEstado: result.estado, raw: result.raw });
+  } catch (error) { logger.error('sync-status error: ' + error.message); res.status(500).json({ error: error.message }); }
 });
 
 router.get('/status/:orderId', async (req, res) => {

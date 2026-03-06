@@ -10,6 +10,7 @@ export default function OrdersPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [invoicingId, setInvoicingId] = useState(null);
+  const [syncingId, setSyncingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [search, setSearch] = useState('');
   const [pageInfo, setPageInfo] = useState({ hasNextPage: false, endCursor: null });
@@ -27,10 +28,10 @@ export default function OrdersPage() {
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  // Auto-refresh while any order is processing (waiting for Facturante webhook)
+  // Auto-refresh mientras alguna orden esta en procesando (esperando webhook de Facturante)
   useEffect(() => {
     if (orders.some(o => o.facturacion_status === 'processing')) {
-      var t = setTimeout(() => loadOrders(), 120000);
+      var t = setTimeout(() => loadOrders(), 30000);
       return () => clearTimeout(t);
     }
   }, [orders, loadOrders]);
@@ -44,6 +45,23 @@ export default function OrdersPage() {
     } catch (e) { setError(e.message); } finally { setInvoicingId(null); }
   }, [fetch, confirmId, loadOrders]);
 
+  const handleSyncStatus = useCallback(async (orderId) => {
+    setSyncingId(orderId); setError(null); setSuccess(null);
+    try {
+      var d = await fetch('/api/invoices/sync-status/' + orderId, { method: 'POST' });
+      if (d.status === 'completed') {
+        setSuccess('Factura autorizada. CAE: ' + d.cae);
+        if (typeof shopify !== 'undefined') shopify.toast.show('Factura autorizada correctamente');
+        loadOrders();
+      } else if (d.status === 'failed') {
+        setError('Facturante rechazó el comprobante: ' + (d.message || ''));
+        loadOrders();
+      } else {
+        if (typeof shopify !== 'undefined') shopify.toast.show('Aun en proceso en Facturante. Estado: ' + (d.facturanteEstado || 'procesando'));
+      }
+    } catch (e) { setError(e.message); } finally { setSyncingId(null); }
+  }, [fetch, loadOrders]);
+
   function statusBadge(o) {
     if (o.facturacion_status === 'completed') return <Badge tone="success">Facturada</Badge>;
     if (o.facturacion_status === 'processing') return <Badge tone="attention">Procesando</Badge>;
@@ -56,7 +74,7 @@ export default function OrdersPage() {
     return <Badge>Pendiente</Badge>;
   }
 
-  var filtered = orders.filter(function(o) {
+  var filtered = orders.filter(function (o) {
     if (!search) return true;
     var q = search.toLowerCase();
     var num = (o.order_number || '').toLowerCase();
@@ -89,8 +107,13 @@ export default function OrdersPage() {
                   <IndexTable.Cell>
                     {o.facturacion_status === 'completed'
                       ? <Text tone="success" variant="bodySm">CAE: ...{o.cae ? o.cae.slice(-6) : ''}</Text>
-                      : <Button size="slim" variant={o.facturacion_status === 'processing' ? 'plain' : 'secondary'} onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
-                          {o.facturacion_status === 'failed' ? 'Reintentar' : o.facturacion_status === 'processing' ? 'Reprocesar' : 'Facturar'}
+                      : o.facturacion_status === 'processing'
+                        ? <BlockStack gap="100">
+                          <Button size="slim" variant="plain" onClick={() => handleSyncStatus(o.id)} loading={syncingId === o.id}>Verificar estado</Button>
+                          <Button size="slim" variant="plain" tone="critical" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>Reprocesar</Button>
+                        </BlockStack>
+                        : <Button size="slim" variant={o.facturacion_status === 'failed' ? 'secondary' : 'secondary'} onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
+                          {o.facturacion_status === 'failed' ? 'Reintentar' : 'Facturar'}
                         </Button>}
                   </IndexTable.Cell>
                 </IndexTable.Row>

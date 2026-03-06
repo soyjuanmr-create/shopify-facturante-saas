@@ -83,10 +83,46 @@ class FacturanteService {
       var estado = this._extractTag(data, 'Estado');
       var msg = this._extractTag(data, 'Mensaje');
       var idComp = this._extractTag(data, 'IdComprobante');
+      var caeInline = this._extractTag(data, 'CAE');
+      var numeroInline = this._extractTag(data, 'NumeroComprobante') || this._extractTag(data, 'Numero');
+      var estadoFinal = (this._extractTag(data, 'Estado') || '').toLowerCase();
+      logger.info('CrearComprobante raw (primeros 1000): ' + String(data).substring(0, 1000));
       if (estado !== 'OK') throw new Error(msg || 'Estado inesperado: ' + estado);
-      return { idComprobante: idComp, estado: 'OK', mensaje: msg };
+      return {
+        idComprobante: idComp,
+        estado: 'OK',
+        mensaje: msg,
+        // Si Facturante devuelve el CAE sincrónicamente (algunos planes):
+        cae: caeInline || null,
+        numero: numeroInline || null,
+        autorizado: estadoFinal === 'autorizado' && !!caeInline,
+      };
     } catch (err) {
       logger.error('=== ERROR === ' + (err.response ? err.response.status : ''));
+      throw err;
+    }
+  }
+
+  /**
+   * Consulta el estado de un comprobante ya emitido por su IdComprobante.
+   * Útil para hacer polling cuando el webhook de Facturante no llega.
+   */
+  async consultarComprobante(idComprobante) {
+    var body = '<fac:ConsultarComprobante><fac:request>' + this._auth() +
+      '<fac1:IdComprobante>' + this._esc(idComprobante.toString()) + '</fac1:IdComprobante>' +
+      '</fac:request></fac:ConsultarComprobante>';
+    var xml = this._envelope('ConsultarComprobante', body);
+    try {
+      var res = await this._post('ConsultarComprobante', xml);
+      var data = res.data || '';
+      logger.info('ConsultarComprobante raw (primeros 1000): ' + String(data).substring(0, 1000));
+      var estado = (this._extractTag(data, 'Estado') || '').toLowerCase();
+      var cae = this._extractTag(data, 'CAE');
+      var numero = this._extractTag(data, 'NumeroComprobante') || this._extractTag(data, 'Numero');
+      var msg = this._extractTag(data, 'Mensaje');
+      return { estado, cae, numero, mensaje: msg, raw: String(data).substring(0, 2000) };
+    } catch (err) {
+      logger.error('ConsultarComprobante error: ' + err.message);
       throw err;
     }
   }
