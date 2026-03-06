@@ -84,13 +84,22 @@ class FacturanteService {
     try {
       var res = await this._post('CrearComprobante', xml);
       var data = res.data || '';
-      var estado = this._extractTag(data, 'Estado');
-      var msg = this._extractTag(data, 'Mensaje');
-      var idComp = this._extractTag(data, 'IdComprobante');
-      var caeInline = this._extractTag(data, 'CAE');
-      var numeroInline = this._extractTag(data, 'NumeroComprobante') || this._extractTag(data, 'Numero');
-      var estadoFinal = (this._extractTag(data, 'Estado') || '').toLowerCase();
-      logger.info('CrearComprobante raw (primeros 1000): ' + String(data).substring(0, 1000));
+      var rawStr = String(data);
+
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        logger.error('CrearComprobante SOAP Fault: ' + faultString);
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+
+      var estado = this._extractTag(rawStr, 'Estado');
+      var msg = this._extractTag(rawStr, 'Mensaje');
+      var idComp = this._extractTag(rawStr, 'IdComprobante');
+      var caeInline = this._extractTag(rawStr, 'CAE');
+      var numeroInline = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'Numero');
+      var estadoFinal = (this._extractTag(rawStr, 'Estado') || '').toLowerCase();
+
+      logger.info('CrearComprobante raw (primeros 1000): ' + rawStr.substring(0, 1000));
       if (estado !== 'OK') throw new Error(msg || 'Estado inesperado: ' + estado);
       return {
         idComprobante: idComp,
@@ -102,7 +111,11 @@ class FacturanteService {
         autorizado: estadoFinal === 'autorizado' && !!caeInline,
       };
     } catch (err) {
-      logger.error('=== ERROR === ' + (err.response ? err.response.status : ''));
+      if (err.response) {
+        logger.error('CrearComprobante HTTP error status=' + err.response.status + ' body=' + JSON.stringify(err.response.data || '').substring(0, 500));
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
+      logger.error('=== ERROR CrearComprobante === ' + err.message);
       throw err;
     }
   }
