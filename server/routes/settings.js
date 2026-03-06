@@ -23,10 +23,12 @@ router.post('/', async (req, res) => {
     if (usuario !== undefined) updateData.usuario = usuario;
     if (hash !== undefined && hash !== String.fromCharCode(8226).repeat(6)) updateData.hash = hash;
     if (puntoVenta !== undefined) updateData.puntoVenta = puntoVenta;
-    await prisma.shop.upsert({
+    const existingShop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!existingShop) return res.status(403).json({ error: 'La tienda no esta instalada correctamente. Por favor vuelve a instalar la app.' });
+
+    await prisma.shop.update({
       where: { shopDomain: req.shopDomain },
       update: updateData,
-      create: { shopDomain: req.shopDomain, accessToken: '', ...updateData },
     });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: error.message }); }

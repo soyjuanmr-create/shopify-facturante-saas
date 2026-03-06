@@ -39,7 +39,7 @@ router.get('/orders', async (req, res) => {
 
     logger.info('Orders: shop=' + req.shopDomain + ' sessionTable=' + (sessionRecord ? 'found,tok=' + (sessionRecord.accessToken || '').substring(0, 8) : 'NOT FOUND') + ' shopTable=tok=' + (shop.accessToken || '').substring(0, 8));
 
-    if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
+    if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
@@ -85,7 +85,7 @@ router.post('/generate', async (req, res) => {
       orderBy: { expires: 'desc' },
     });
     const accessToken2 = (sessionRecord2 && sessionRecord2.accessToken) ? sessionRecord2.accessToken : shop.accessToken;
-    if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Por favor reinstala la app.' });
+    if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
     const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
     const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
