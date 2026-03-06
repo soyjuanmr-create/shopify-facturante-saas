@@ -56,10 +56,16 @@ export default function OrdersPage() {
       } else if (d.status === 'failed') {
         setError('Facturante rechazó el comprobante: ' + (d.message || ''));
         loadOrders();
+      } else if (d.error) {
+        // El servidor devolvio un error con mensaje descriptivo (400, 404, 502, 500)
+        setError(d.error + (d.tip ? ' — ' + d.tip : ''));
       } else {
         if (typeof shopify !== 'undefined') shopify.toast.show('Aun en proceso en Facturante. Estado: ' + (d.facturanteEstado || 'procesando'));
       }
-    } catch (e) { setError(e.message); } finally { setSyncingId(null); }
+    } catch (e) {
+      // useAuthFetch lanza el error como texto del servidor si esta disponible
+      setError('Error al verificar estado: ' + e.message);
+    } finally { setSyncingId(null); }
   }, [fetch, loadOrders]);
 
   function statusBadge(o) {

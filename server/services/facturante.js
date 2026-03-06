@@ -26,15 +26,19 @@ class FacturanteService {
   }
 
   async _post(action, xml, retries) {
-    retries = retries || 3;
+    retries = retries || 2;
     var fullAction = BASE_ACTION + '/' + action;
     for (var i = 0; i < retries; i++) {
       try {
-        return await axios.post(ENDPOINT, xml, { headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="' + fullAction + '"', 'Accept': 'application/soap+xml' } });
+        // validateStatus: aceptar 200 y 500 (SOAP faults vienen como HTTP 500)
+        return await axios.post(ENDPOINT, xml, {
+          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="' + fullAction + '"', 'Accept': 'application/soap+xml' },
+          validateStatus: function (s) { return s === 200 || s === 500; },
+        });
       } catch (error) {
         if (i === retries - 1) throw error;
         logger.warn('Intento ' + (i + 1) + ' fallido para ' + fullAction + '. Reintentando...');
-        await new Promise(function (r) { setTimeout(r, 2000); });
+        await new Promise(function (r) { setTimeout(r, 1000); });
       }
     }
   }
@@ -112,16 +116,33 @@ class FacturanteService {
       '<fac1:IdComprobante>' + this._esc(idComprobante.toString()) + '</fac1:IdComprobante>' +
       '</fac:request></fac:ConsultarComprobante>';
     var xml = this._envelope('ConsultarComprobante', body);
+    logger.info('ConsultarComprobante: enviando para idComprobante=' + idComprobante);
     try {
       var res = await this._post('ConsultarComprobante', xml);
       var data = res.data || '';
-      logger.info('ConsultarComprobante raw (primeros 1000): ' + String(data).substring(0, 1000));
-      var estado = (this._extractTag(data, 'Estado') || '').toLowerCase();
-      var cae = this._extractTag(data, 'CAE');
-      var numero = this._extractTag(data, 'NumeroComprobante') || this._extractTag(data, 'Numero');
-      var msg = this._extractTag(data, 'Mensaje');
-      return { estado, cae, numero, mensaje: msg, raw: String(data).substring(0, 2000) };
+      var rawStr = String(data);
+      logger.info('ConsultarComprobante HTTP status=' + res.status + ' raw (primeros 1500): ' + rawStr.substring(0, 1500));
+
+      // Detectar Fault SOAP (error del servidor de Facturante)
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        logger.error('ConsultarComprobante SOAP Fault: ' + faultString);
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+
+      var estado = (this._extractTag(rawStr, 'Estado') || '').toLowerCase();
+      var cae = this._extractTag(rawStr, 'CAE');
+      var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'Numero');
+      var msg = this._extractTag(rawStr, 'Mensaje');
+
+      logger.info('ConsultarComprobante parsed: estado=' + estado + ' cae=' + cae + ' msg=' + msg);
+      return { estado, cae, numero, mensaje: msg, raw: rawStr.substring(0, 2000) };
     } catch (err) {
+      // Si es error de red (axios) registrar el cuerpo de respuesta si existe
+      if (err.response) {
+        logger.error('ConsultarComprobante HTTP error status=' + err.response.status + ' body=' + JSON.stringify(err.response.data || '').substring(0, 500));
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
       logger.error('ConsultarComprobante error: ' + err.message);
       throw err;
     }

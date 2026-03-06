@@ -145,13 +145,38 @@ router.post('/sync-status/:orderId', async (req, res) => {
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Credenciales de Facturante no configuradas.' });
 
     const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
-    if (!invoice) return res.status(404).json({ error: 'Factura no encontrada' });
-    if (invoice.status === 'completed') return res.json({ status: 'completed', cae: invoice.cae, message: 'Ya esta completada' });
-    if (!invoice.facturanteInvoiceId) return res.status(400).json({ error: 'No hay ID de comprobante para consultar' });
+    if (!invoice) {
+      // No hay registro local — la orden aun no fue enviada a Facturante
+      return res.status(404).json({ error: 'No existe un comprobante registrado para esta orden. Usa "Facturar" primero.' });
+    }
+    if (invoice.status === 'completed') {
+      return res.json({ status: 'completed', cae: invoice.cae, message: 'Factura ya autorizada. CAE: ' + invoice.cae });
+    }
+    if (!invoice.facturanteInvoiceId) {
+      // Comprobante pendiente sin ID de Facturante — estado 'processing' pero sin ID para consultar
+      logger.warn('sync-status: orderId=' + orderId + ' status=' + invoice.status + ' pero facturanteInvoiceId es null');
+      return res.status(400).json({
+        error: 'El comprobante fue enviado pero Facturante no retorno un ID. Puede que aun este procesando. Intenta nuevamente en unos minutos o revisa el panel de Facturante.',
+        status: invoice.status,
+        localStatus: invoice.status,
+      });
+    }
 
+    logger.info('sync-status: consultando Facturante para orderId=' + orderId + ' idComprobante=' + invoice.facturanteInvoiceId);
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
-    const result = await facturante.consultarComprobante(invoice.facturanteInvoiceId);
-    logger.info('sync-status orderId=' + orderId + ' estado=' + result.estado + ' cae=' + result.cae);
+
+    let result;
+    try {
+      result = await facturante.consultarComprobante(invoice.facturanteInvoiceId);
+    } catch (facErr) {
+      logger.error('sync-status: consultarComprobante fallo para idComprobante=' + invoice.facturanteInvoiceId + ': ' + facErr.message);
+      return res.status(502).json({
+        error: 'Error al consultar Facturante: ' + facErr.message,
+        tip: 'Verifica que el comprobante exista en tu panel de Facturante (ID: ' + invoice.facturanteInvoiceId + ')',
+      });
+    }
+
+    logger.info('sync-status orderId=' + orderId + ' estado=' + result.estado + ' cae=' + result.cae + ' raw=' + (result.raw || '').substring(0, 300));
 
     const sessionRecord = await prisma.session.findFirst({
       where: { shop: req.shopDomain, isOnline: false },
@@ -169,14 +194,17 @@ router.post('/sync-status/:orderId', async (req, res) => {
       });
       await setInvoiceMetafields(session, orderId, { status: 'completed', cae: caeStr, invoiceNumber: numStr });
       return res.json({ status: 'completed', cae: caeStr, invoiceNumber: numStr, message: 'Estado actualizado a completado' });
-    } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing') {
+    } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing' && result.estado !== 'ok') {
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: result.mensaje || result.estado } });
       await setInvoiceMetafields(session, orderId, { status: 'failed', error: result.mensaje || result.estado });
-      return res.json({ status: 'failed', message: result.mensaje, raw: result.raw });
+      return res.json({ status: 'failed', message: result.mensaje || result.estado, raw: result.raw });
     }
 
-    res.json({ status: invoice.status, message: 'Aun en procesamiento en Facturante', facturanteEstado: result.estado, raw: result.raw });
-  } catch (error) { logger.error('sync-status error: ' + error.message); res.status(500).json({ error: error.message }); }
+    res.json({ status: invoice.status, message: 'Aun en procesamiento en Facturante', facturanteEstado: result.estado || '(sin estado)', raw: result.raw });
+  } catch (error) {
+    logger.error('sync-status error inesperado: ' + error.message + ' stack: ' + (error.stack || '').substring(0, 500));
+    res.status(500).json({ error: 'Error interno: ' + error.message });
+  }
 });
 
 router.get('/status/:orderId', async (req, res) => {
