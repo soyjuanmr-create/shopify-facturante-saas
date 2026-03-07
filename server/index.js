@@ -31,6 +31,7 @@ var settingsRoutes = require('./routes/settings');
 var invoiceRoutes = require('./routes/invoices');
 var printRoutes = require('./routes/print');
 var webhookRoutes = require('./routes/webhooks');
+var { startCron } = require('./services/cronSync');
 
 var app = express();
 app.set('trust proxy', 1);
@@ -70,12 +71,30 @@ app.get('/api/auth/callback', async function (req, res) {
     });
     logger.info('OAuth callback: Shop upserted in DB for ' + session.shop);
     try { await shopify.webhooks.register({ session: session }); } catch (e) { logger.warn('Webhook reg error: ' + e.message); }
-    // Billing temporalmente desactivado para pruebas
-    // var billingCheck = await shopify.billing.check({ session: session, plans: ['SaaS Plan'], isTest: process.env.NODE_ENV !== 'production' });
-    // if (!billingCheck.hasActivePayment) {
-    //   var billingUrl = await shopify.billing.request({ session: session, plan: 'SaaS Plan', isTest: process.env.NODE_ENV !== 'production' });
-    //   return res.redirect(billingUrl.confirmationUrl);
-    // }
+
+    // Billing: verificar si el merchant tiene un plan activo
+    try {
+      const isTest = process.env.NODE_ENV !== 'production';
+      const billingCheck = await shopify.billing.check({
+        session: session,
+        plans: ['SaaS Plan'],
+        isTest: isTest,
+      });
+      if (!billingCheck.hasActivePayment) {
+        logger.info('Billing: merchant ' + session.shop + ' sin plan activo, redirigiendo a checkout...');
+        const billingResponse = await shopify.billing.request({
+          session: session,
+          plan: 'SaaS Plan',
+          isTest: isTest,
+        });
+        return res.redirect(billingResponse.confirmationUrl);
+      }
+      logger.info('Billing: merchant ' + session.shop + ' tiene plan activo.');
+    } catch (billingErr) {
+      // Si falla el check de billing, dejar pasar (no bloquear al merchant)
+      logger.warn('Billing check error (no bloqueante): ' + billingErr.message);
+    }
+
     res.redirect('/?shop=' + session.shop + '&host=' + req.query.host);
   } catch (error) { logger.error('OAuth error: ' + error.message); res.status(500).send('Auth error: ' + error.message); }
 });
@@ -102,5 +121,6 @@ console.log('Attempting to start server on port', PORT);
 app.listen(PORT, function () {
   console.log('SERVER STARTED - Shopifac running on port ' + PORT);
   logger.info('Shopifac running on port ' + PORT);
+  startCron();
 });
 module.exports = app;

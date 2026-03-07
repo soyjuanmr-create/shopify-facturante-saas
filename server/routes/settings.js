@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
 
     await prisma.shop.update({
       where: { shopDomain: req.shopDomain },
-      update: updateData,
+      data: updateData,
     });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: error.message }); }

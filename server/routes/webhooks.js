@@ -86,16 +86,17 @@ router.post('/shopify', async (req, res) => {
   try {
     if (topic === 'customers/redact') {
       // Anonymize customer PII from invoices for specific orders
+      // invoiceData tambien contiene PII (nombre, email, CUIT) — se elimina junto con los otros campos
       var ordersToRedact = (payload.orders_to_redact || []).map(String);
       if (ordersToRedact.length > 0) {
         await prisma.invoice.updateMany({
           where: { shopifyOrderId: { in: ordersToRedact } },
-          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null }
+          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null, errorMessage: null }
         });
       } else if (payload.customer && payload.customer.email) {
         await prisma.invoice.updateMany({
           where: { customerEmail: payload.customer.email },
-          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null }
+          data: { customerName: '[REDACTED]', customerEmail: null, invoiceData: null, errorMessage: null }
         });
       }
       logger.info('customers/redact processed for ' + shopDomain);
@@ -127,6 +128,16 @@ function extractXmlTag(xml, tag) {
 
 router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
   try {
+    // Verificar token secreto para evitar llamadas no autorizadas
+    var facturanteSecret = process.env.FACTURANTE_WEBHOOK_SECRET;
+    if (facturanteSecret) {
+      var incomingSecret = req.headers['x-facturante-secret'] || req.headers['authorization'];
+      if (incomingSecret !== facturanteSecret && incomingSecret !== ('Bearer ' + facturanteSecret)) {
+        logger.warn('Facturante webhook: token invalido, IP=' + (req.ip || 'unknown'));
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+    }
+
     var raw = req.body ? req.body.toString() : '';
     logger.info('Facturante webhook raw: ' + raw.substring(0, 500));
 
@@ -164,7 +175,7 @@ router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
     var accessTokenForMeta = (sessionRec && sessionRec.accessToken) ? sessionRec.accessToken : invoice.shop.accessToken;
     var session = { shop: invoice.shop.shopDomain, accessToken: accessTokenForMeta };
 
-    if (estado === 'autorizado' && cae) {
+    if ((estado === 'autorizado' || estado === 'ok') && cae) {
       var caeStr = cae.toString();
       var numStr = numero ? numero.toString() : null;
       await prisma.invoice.update({
