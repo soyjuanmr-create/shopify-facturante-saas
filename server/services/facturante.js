@@ -43,7 +43,11 @@ class FacturanteService {
     }
   }
 
-  _extractTag(xml, tag) { var match = xml.match(new RegExp('<[^>]*:?' + tag + '[^>]*>([^<]*)<')); return match ? match[1].trim() : null; }
+  _extractTag(xml, tag) {
+    // Intenta sin namespace y después con cualquier namespace (fac2:Tag, etc.)
+    var m = xml.match(new RegExp('<(?:[^>]*:)?' + tag + '[^>]*>([^<]*)<'));
+    return m ? m[1].trim() : null;
+  }
 
   mapearTipoDocumento(tipo) {
     var t = (tipo || '').toUpperCase();
@@ -144,9 +148,10 @@ class FacturanteService {
       }
 
       var estado = (this._extractTag(rawStr, 'Estado') || '').toLowerCase();
-      var cae = this._extractTag(rawStr, 'CAE');
-      var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'Numero');
-      var msg = this._extractTag(rawStr, 'Mensaje');
+      // CAE puede venir como <CAE>, <Cae>, <cae>, <fac2:CAE>, etc.
+      var cae = this._extractTag(rawStr, 'CAE') || this._extractTag(rawStr, 'Cae') || this._extractTag(rawStr, 'cae');
+      var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'NroComprobante') || this._extractTag(rawStr, 'Numero');
+      var msg = this._extractTag(rawStr, 'Mensaje') || this._extractTag(rawStr, 'Descripcion');
 
       logger.info('DetalleComprobante parsed: estado=' + estado + ' cae=' + cae + ' msg=' + msg);
       return { estado, cae, numero, mensaje: msg, raw: rawStr.substring(0, 2000) };

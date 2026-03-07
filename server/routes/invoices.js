@@ -185,21 +185,30 @@ router.post('/sync-status/:orderId', async (req, res) => {
     const accessToken = (sessionRecord && sessionRecord.accessToken) ? sessionRecord.accessToken : shop.accessToken;
     const session = { shop: req.shopDomain, accessToken };
 
-    if (result.estado === 'autorizado' && result.cae) {
-      const caeStr = result.cae.toString();
-      const numStr = result.numero ? result.numero.toString() : null;
+    // Facturante puede retornar 'autorizado' (con CAE) o simplemente 'ok' (también autorizado)
+    const estadoOk = result.estado === 'autorizado' || result.estado === 'ok';
+
+    if (estadoOk) {
+      // Usar el CAE de la respuesta, o el que ya teníamos en la BD como fallback
+      const caeStr = result.cae ? result.cae.toString() : (invoice.cae || null);
+      const numStr = result.numero ? result.numero.toString() : (invoice.facturanteInvoiceNumber || null);
+
+      logger.info('sync-status: marcando completed para orderId=' + orderId + ' estado=' + result.estado + ' cae=' + caeStr);
+
       await prisma.invoice.update({
         where: { id: invoice.id },
         data: { status: 'completed', cae: caeStr, facturanteInvoiceNumber: numStr, processedAt: new Date() },
       });
       await setInvoiceMetafields(session, orderId, { status: 'completed', cae: caeStr, invoiceNumber: numStr });
-      return res.json({ status: 'completed', cae: caeStr, invoiceNumber: numStr, message: 'Estado actualizado a completado' });
-    } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing' && result.estado !== 'ok') {
+      return res.json({ status: 'completed', cae: caeStr, invoiceNumber: numStr, message: 'Factura autorizada. CAE: ' + caeStr });
+    } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing') {
+      // Estado desconocido y distinto de «procesando» => fallo
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: result.mensaje || result.estado } });
       await setInvoiceMetafields(session, orderId, { status: 'failed', error: result.mensaje || result.estado });
       return res.json({ status: 'failed', message: result.mensaje || result.estado, raw: result.raw });
     }
 
+    // Estado es 'procesando' / 'processing' o vacío => todavía en cola
     res.json({ status: invoice.status, message: 'Aun en procesamiento en Facturante', facturanteEstado: result.estado || '(sin estado)', raw: result.raw });
   } catch (error) {
     logger.error('sync-status error inesperado: ' + error.message + ' stack: ' + (error.stack || '').substring(0, 500));
