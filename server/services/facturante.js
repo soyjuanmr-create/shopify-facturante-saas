@@ -125,21 +125,21 @@ class FacturanteService {
    * Útil para hacer polling cuando el webhook de Facturante no llega.
    */
   async consultarComprobante(idComprobante) {
-    var body = '<fac:ConsultarComprobante><fac:request>' + this._auth() +
+    var body = '<fac:DetalleComprobante><fac:request>' + this._auth() +
       '<fac1:IdComprobante>' + this._esc(idComprobante.toString()) + '</fac1:IdComprobante>' +
-      '</fac:request></fac:ConsultarComprobante>';
-    var xml = this._envelope('ConsultarComprobante', body);
-    logger.info('ConsultarComprobante: enviando para idComprobante=' + idComprobante);
+      '</fac:request></fac:DetalleComprobante>';
+    var xml = this._envelope('DetalleComprobante', body);
+    logger.info('DetalleComprobante: enviando para idComprobante=' + idComprobante);
     try {
-      var res = await this._post('ConsultarComprobante', xml);
+      var res = await this._post('DetalleComprobante', xml);
       var data = res.data || '';
       var rawStr = String(data);
-      logger.info('ConsultarComprobante HTTP status=' + res.status + ' raw (primeros 1500): ' + rawStr.substring(0, 1500));
+      logger.info('DetalleComprobante HTTP status=' + res.status + ' raw (primeros 1500): ' + rawStr.substring(0, 1500));
 
       // Detectar Fault SOAP (error del servidor de Facturante)
       if (rawStr.includes('Fault') || rawStr.includes('fault')) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
-        logger.error('ConsultarComprobante SOAP Fault: ' + faultString);
+        logger.error('DetalleComprobante SOAP Fault: ' + faultString);
         throw new Error('Facturante SOAP Fault: ' + faultString);
       }
 
@@ -148,15 +148,15 @@ class FacturanteService {
       var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'Numero');
       var msg = this._extractTag(rawStr, 'Mensaje');
 
-      logger.info('ConsultarComprobante parsed: estado=' + estado + ' cae=' + cae + ' msg=' + msg);
+      logger.info('DetalleComprobante parsed: estado=' + estado + ' cae=' + cae + ' msg=' + msg);
       return { estado, cae, numero, mensaje: msg, raw: rawStr.substring(0, 2000) };
     } catch (err) {
       // Si es error de red (axios) registrar el cuerpo de respuesta si existe
       if (err.response) {
-        logger.error('ConsultarComprobante HTTP error status=' + err.response.status + ' body=' + JSON.stringify(err.response.data || '').substring(0, 500));
+        logger.error('DetalleComprobante HTTP error status=' + err.response.status + ' body=' + JSON.stringify(err.response.data || '').substring(0, 500));
         throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
       }
-      logger.error('ConsultarComprobante error: ' + err.message);
+      logger.error('DetalleComprobante error: ' + err.message);
       throw err;
     }
   }
