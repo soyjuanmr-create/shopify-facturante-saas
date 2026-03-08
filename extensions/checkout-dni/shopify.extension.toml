@@ -8,4 +8,4 @@ type = "ui_extension"
 
 [[extensions.targeting]]
 module = "./src/CheckoutDNI.jsx"
-target = "purchase.checkout.block.render"
+target = "purchase.checkout.delivery-address.render-after"
