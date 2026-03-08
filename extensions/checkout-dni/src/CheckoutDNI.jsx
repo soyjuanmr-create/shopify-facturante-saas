@@ -1,49 +1,45 @@
-import { useState } from 'react';
+/** @jsxImportSource preact */
+import { useState } from 'preact/hooks';
 import {
-  reactExtension,
-  BlockStack,
-  TextField,
   useApplyAttributeChange,
   useAttributeValues,
   useTranslate,
-} from '@shopify/ui-extensions-react/checkout';
+} from '@shopify/ui-extensions/checkout/preact';
 
-export default reactExtension(
-  'purchase.checkout.contact.render-after',
-  () => <CheckoutDNI />
-);
-
-function CheckoutDNI() {
+export default function CheckoutDNI() {
+  var applyAttributeChange = useApplyAttributeChange();
+  var [savedDoc] = useAttributeValues(['Documento']);
   var translate = useTranslate();
-  var applyAttribute = useApplyAttributeChange();
-  var [savedValue] = useAttributeValues(['Documento']);
-  var [value, setValue] = useState(savedValue || '');
+  var [value, setValue] = useState(savedDoc || '');
   var [error, setError] = useState('');
 
-  function handleChange(newVal) {
-    var nums = newVal.replace(/\D/g, '');
+  function handleInput(e) {
+    var nums = (e.target.value || '').replace(/\D/g, '');
     setValue(nums);
     setError('');
-    applyAttribute({ key: 'Documento', value: nums });
+    applyAttributeChange({ key: 'Documento', type: 'updateAttribute', value: nums });
   }
 
   function handleBlur() {
     if (!value) { setError(''); return; }
-    if (value.length < 7 || (value.length > 8 && value.length < 11) || value.length > 11) {
+    var len = value.length;
+    if (len < 7 || (len > 8 && len < 11) || len > 11) {
       setError(translate('error_length'));
+    } else {
+      setError('');
     }
   }
 
   return (
-    <BlockStack>
-      <TextField
+    <s-stack direction="block">
+      <s-text-field
         label={translate('label')}
         value={value}
-        onChange={handleChange}
+        input-mode="numeric"
+        error={error || undefined}
+        onInput={handleInput}
         onBlur={handleBlur}
-        error={error}
-        inputMode="numeric"
       />
-    </BlockStack>
+    </s-stack>
   );
 }
