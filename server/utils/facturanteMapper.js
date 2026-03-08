@@ -39,7 +39,7 @@
   }
 
   static determinarTipoComprobante(order) {
-    var cuit = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI']);
+    var cuit = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI', 'documento_identidad']);
     if (!cuit) { var company = ((order.billing_address || {}).company || '').trim(); if (company.match(/^[0-9-]{10,13}$/)) cuit = company; }
     if (cuit) { var cleanCuit = cuit.replace(/\D/g, ''); if (cleanCuit.length === 11 && this.validarCUIT(cleanCuit)) return 'FA'; }
     return 'FB';
@@ -47,7 +47,7 @@
 
   static mapearCliente(order) {
     var billing = order.billing_address || order.shipping_address || {};
-    var docValue = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI', 'documento_numero']) || '';
+    var docValue = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI', 'documento_identidad', 'documento_numero']) || '';
     if (!docValue && billing.company) { var company = billing.company.trim(); if (company.match(/^[0-9-]{7,13}$/)) docValue = company; }
     var nroDoc = docValue.replace(/\D/g, '');
     return {
