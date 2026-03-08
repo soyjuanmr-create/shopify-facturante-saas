@@ -128,46 +128,70 @@ function extractXmlTag(xml, tag) {
 
 router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
   try {
-    // Verificar token secreto para evitar llamadas no autorizadas
+    // Verificar token secreto (lo pedimos que nos reenvíe vía X-Facturante-Secret en el WebHook/Headers)
     var facturanteSecret = process.env.FACTURANTE_WEBHOOK_SECRET;
     if (facturanteSecret) {
-      var incomingSecret = req.headers['x-facturante-secret'] || req.headers['authorization'];
-      if (incomingSecret !== facturanteSecret && incomingSecret !== ('Bearer ' + facturanteSecret)) {
+      var incomingSecret = req.headers['x-facturante-secret'];
+      if (incomingSecret !== facturanteSecret) {
         logger.warn('Facturante webhook: token invalido, IP=' + (req.ip || 'unknown'));
         return res.status(401).json({ error: 'Unauthorized' });
       }
     }
 
     var raw = req.body ? req.body.toString() : '';
-    logger.info('Facturante webhook raw: ' + raw.substring(0, 500));
+    logger.info('Facturante webhook raw: ' + raw.substring(0, 800));
 
-    // Intentar parsear como JSON primero, luego como XML
+    // Parsear: intentar JSON primero (V2 JSON que pedimos con facturante-content-type header),
+    // luego XML V2 como fallback, y finalmente x-www-form-urlencoded (V1 legacy)
     var data = {};
-    try { data = JSON.parse(raw); } catch (e) {
-      // Extraer campos del XML
+    var contentType = (req.headers['content-type'] || '').toLowerCase();
+
+    if (contentType.includes('json')) {
+      try { data = JSON.parse(raw); } catch (e) {
+        logger.warn('Facturante webhook: content-type=json pero parse falló: ' + e.message);
+      }
+    } else if (contentType.includes('xml') || raw.trim().startsWith('<')) {
+      // XML V2
       data = {
         IdComprobante: extractXmlTag(raw, 'IdComprobante'),
-        CAE: extractXmlTag(raw, 'CAE'),
+        CAE: extractXmlTag(raw, 'CAE') || extractXmlTag(raw, 'Cae'),
         NumeroComprobante: extractXmlTag(raw, 'NumeroComprobante') || extractXmlTag(raw, 'Numero'),
         Estado: extractXmlTag(raw, 'Estado'),
-        Mensaje: extractXmlTag(raw, 'Mensaje'),
+        Mensaje: extractXmlTag(raw, 'Mensaje') || extractXmlTag(raw, 'Descripcion'),
+        Errores: extractXmlTag(raw, 'Errores'),
       };
+    } else {
+      // x-www-form-urlencoded V1 o JSON sin content-type declarado
+      try { data = JSON.parse(raw); } catch (e) {
+        // Parsear form-urlencoded manualmente
+        raw.split('&').forEach(function (pair) {
+          var parts = pair.split('=');
+          if (parts.length === 2) data[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1].replace(/\+/g, ' '));
+        });
+      }
     }
 
+    // Normalizar campos — Facturante puede usar PascalCase o camelCase
     var idComprobante = data.IdComprobante || data.idComprobante || data.id;
-    var cae = data.CAE || data.cae;
-    var numero = data.NumeroComprobante || data.Numero;
-    var estado = (data.Estado || data.estado || '').toLowerCase();
+    var cae = data.CAE || data.cae || data.Cae;
+    var numero = data.NumeroComprobante || data.numeroComprobante || data.Numero || data.numero;
+    var estado = ((data.Estado || data.estado || '')).toLowerCase();
+    var mensajeRaw = data.Mensaje || data.mensaje || data.Descripcion || data.descripcion || '';
+
     logger.info('Facturante webhook parsed: id=' + idComprobante + ' estado=' + estado + ' cae=' + cae);
 
-    if (!idComprobante) return res.status(200).json({ status: 'ignored' });
+    if (!idComprobante) return res.status(200).json({ status: 'ignored', reason: 'no_id' });
+
     var invoice = await prisma.invoice.findFirst({
       where: { facturanteInvoiceId: idComprobante.toString() },
       include: { shop: true },
     });
-    if (!invoice) return res.status(200).json({ status: 'not_found' });
+    if (!invoice) {
+      logger.warn('Facturante webhook: idComprobante=' + idComprobante + ' no encontrado en BD');
+      return res.status(200).json({ status: 'not_found' });
+    }
 
-    // Buscar accessToken en Session (igual que el resto del codebase) para no usar un token expirado
+    // Buscar accessToken en Session para no usar un token expirado
     var sessionRec = await prisma.session.findFirst({
       where: { shop: invoice.shop.shopDomain, isOnline: false },
       orderBy: { expires: 'desc' },
@@ -185,16 +209,21 @@ router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
       await setInvoiceMetafields(session, invoice.shopifyOrderId, {
         status: 'completed', cae: caeStr, invoiceNumber: numStr,
       });
+      logger.info('Facturante webhook: orderId=' + invoice.shopifyOrderId + ' → completed. CAE=' + caeStr);
     } else {
-      var errores = Array.isArray(data.Errores) ? data.Errores.join(', ') : (extractXmlTag(raw, 'Errores') || '');
-      var errorMsg = errores || data.Mensaje || extractXmlTag(raw, 'Mensaje') || 'Rechazado';
+      // Rechazado o estado desconocido → marcar como fallido
+      var errores = Array.isArray(data.Errores) ? data.Errores.join(', ') : (data.Errores || extractXmlTag(raw, 'Errores') || '');
+      var errorMsg = errores || mensajeRaw || estado || 'Rechazado por Facturante';
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'failed', errorMessage: errorMsg } });
-      await setInvoiceMetafields(session, invoice.shopifyOrderId, {
-        status: 'failed', error: errorMsg,
-      });
+      await setInvoiceMetafields(session, invoice.shopifyOrderId, { status: 'failed', error: errorMsg });
+      logger.warn('Facturante webhook: orderId=' + invoice.shopifyOrderId + ' → failed. msg=' + errorMsg);
     }
+
     res.status(200).json({ status: 'processed' });
-  } catch (error) { logger.error('Facturante webhook error: ' + error.message); res.status(200).json({ status: 'error' }); }
+  } catch (error) {
+    logger.error('Facturante webhook error: ' + error.message + ' stack=' + (error.stack || '').substring(0, 300));
+    res.status(200).json({ status: 'error' });
+  }
 });
 
 module.exports = router;

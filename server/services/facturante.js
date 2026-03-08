@@ -76,7 +76,17 @@ class FacturanteService {
     var itemsXml = items.map(function (i) {
       return '<fac2:ComprobanteItem><fac2:Bonificacion>' + i.Bonificacion + '</fac2:Bonificacion><fac2:Cantidad>' + i.Cantidad + '</fac2:Cantidad><fac2:Codigo>' + self._esc(i.Codigo) + '</fac2:Codigo><fac2:Detalle>' + self._esc(i.Detalle) + '</fac2:Detalle><fac2:Gravado>' + i.Gravado + '</fac2:Gravado><fac2:IVA>' + i.IVA + '</fac2:IVA><fac2:PrecioUnitario>' + i.PrecioUnitario + '</fac2:PrecioUnitario><fac2:Total>0</fac2:Total></fac2:ComprobanteItem>';
     }).join('');
-    var webhookXml = webhookUrl ? '<fac1:WebHook><fac2:Url>' + this._esc(webhookUrl) + '</fac2:Url></fac1:WebHook>' : '';
+    // Construir nodo WebHook con headers:
+    // 1) facturante-content-type: application/json → recibir webhook en JSON (más fácil de parsear)
+    // 2) X-Facturante-Secret: <secret> → Facturante lo reenvía en el POST, así validamos autenticidad
+    var webhookSecret = process.env.FACTURANTE_WEBHOOK_SECRET || '';
+    var webhookXml = '';
+    if (webhookUrl) {
+      var headersXml =
+        '<fac2:Header><fac2:Nombre>facturante-content-type</fac2:Nombre><fac2:Valor>application/json</fac2:Valor></fac2:Header>' +
+        (webhookSecret ? '<fac2:Header><fac2:Nombre>X-Facturante-Secret</fac2:Nombre><fac2:Valor>' + this._esc(webhookSecret) + '</fac2:Valor></fac2:Header>' : '');
+      webhookXml = '<fac1:WebHook><fac2:Url>' + this._esc(webhookUrl) + '</fac2:Url><fac2:Headers>' + headersXml + '</fac2:Headers></fac1:WebHook>';
+    }
     var nroDoc = (cliente.nro_documento || '').toString().replace(/\D/g, '');
     // TipoDocumento=13 (Sin identificar/CF): Facturante exige NroDocumento=0
     if (this.mapearTipoDocumento(cliente.tipo_documento) === 13) nroDoc = '0';
