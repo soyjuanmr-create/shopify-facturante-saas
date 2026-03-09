@@ -1,5 +1,4 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-
 client_id = "ddb03a81b1ffb2422828a5e3e5d8f177"
 name = "facturante-conector"
 application_url = "https://shopify-facturante-saas-production-d49a.up.railway.app"
@@ -16,6 +15,18 @@ uri = "/webhooks/shopify/order-paid"
 topics = ["app/uninstalled"]
 uri = "/webhooks/shopify/uninstall"
 
+[[webhooks.subscriptions]]
+topics = ["CUSTOMERS_DATA_REQUEST"]
+uri = "/webhooks/shopify/customers-data-request"
+
+[[webhooks.subscriptions]]
+topics = ["CUSTOMERS_REDACT"]
+uri = "/webhooks/shopify/customers-redact"
+
+[[webhooks.subscriptions]]
+topics = ["SHOP_REDACT"]
+uri = "/webhooks/shopify/shop-redact"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_customers,read_orders,write_orders,read_products"
@@ -27,15 +38,3 @@ redirect_urls = [ "https://shopify-facturante-saas-production-d49a.up.railway.ap
 
 [app_preferences]
 url = "https://shopify-facturante-saas-production-d49a.up.railway.app/admin"
-
-[[webhooks.subscriptions]]
-topics = ["customers/data_request"]
-uri = "/webhooks/shopify/customers-data-request"
-
-[[webhooks.subscriptions]]
-topics = ["customers/redact"]
-uri = "/webhooks/shopify/customers-redact"
-
-[[webhooks.subscriptions]]
-topics = ["shop/redact"]
-uri = "/webhooks/shopify/shop-redact"
