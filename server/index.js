@@ -32,6 +32,7 @@ var invoiceRoutes = require('./routes/invoices');
 var printRoutes = require('./routes/print');
 var webhookRoutes = require('./routes/webhooks');
 var { startCron } = require('./services/cronSync');
+var { activateCheckoutExtension } = require('./utils/checkoutExtension');
 
 var app = express();
 app.set('trust proxy', 1);
@@ -71,6 +72,9 @@ app.get('/api/auth/callback', async function (req, res) {
     });
     logger.info('OAuth callback: Shop upserted in DB for ' + session.shop);
     try { await shopify.webhooks.register({ session: session }); } catch (e) { logger.warn('Webhook reg error: ' + e.message); }
+
+    // Activar extensión checkout DNI (fire-and-forget, no bloquea el OAuth)
+    activateCheckoutExtension(session.shop, session.accessToken);
 
     // Billing: verificar si el merchant tiene un plan activo
     try {

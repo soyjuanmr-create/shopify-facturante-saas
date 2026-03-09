@@ -12,6 +12,14 @@ export default function HomePage() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   const [dismissed, setDismissed] = useState(false);
+  const [dniBannerDismissed, setDniBannerDismissed] = useState(
+    () => localStorage.getItem('shopifac_dni_banner_dismissed') === '1'
+  );
+
+  const shop = new URLSearchParams(window.location.search).get('shop') || '';
+  const checkoutEditorUrl = shop
+    ? `https://${shop}/admin/themes/current/editor?template=checkout`
+    : 'https://admin.shopify.com';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +41,22 @@ export default function HomePage() {
     <Page title="Shopifac" subtitle="Facturacion electronica para Argentina">
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
+        {isConfigured && !dniBannerDismissed && (
+          <Banner
+            title="Activar campo DNI/CUIT en el checkout"
+            tone="info"
+            action={{
+              content: 'Ir al editor de checkout',
+              onAction: () => window.open(checkoutEditorUrl, '_blank'),
+            }}
+            onDismiss={() => {
+              localStorage.setItem('shopifac_dni_banner_dismissed', '1');
+              setDniBannerDismissed(true);
+            }}
+          >
+            <p>Para que tus clientes puedan ingresar su DNI o CUIT al comprar, necesitas agregar el bloque <strong>Campo DNI/CUIT - Shopifac</strong> en el editor de checkout y activar el toggle <strong>"Activar campo DNI/CUIT"</strong>.</p>
+          </Banner>
+        )}
         {isConfigured ? (
           <Banner title="Facturante conectado" tone="success">
             <p>Las facturas se {settings.autoInvoice ? 'emiten automaticamente al recibir un pago' : 'pueden emitir manualmente desde Ordenes'}.</p>
