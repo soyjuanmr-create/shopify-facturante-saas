@@ -16,19 +16,10 @@ topics = ["app/uninstalled"]
 uri = "/webhooks/shopify/uninstall"
 
 [[webhooks.subscriptions]]
-topics = ["CUSTOMERS_DATA_REQUEST"]
-uri = "/webhooks/shopify/customers-data-request"
-
-[[webhooks.subscriptions]]
-topics = ["CUSTOMERS_REDACT"]
-uri = "/webhooks/shopify/customers-redact"
-
-[[webhooks.subscriptions]]
-topics = ["SHOP_REDACT"]
-uri = "/webhooks/shopify/shop-redact"
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "/webhooks/shopify/gdpr"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_customers,read_orders,write_orders,read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
