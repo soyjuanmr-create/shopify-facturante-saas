@@ -55,7 +55,7 @@ export default function HomePage() {
               setDniBannerDismissed(true);
             }}
           >
-            <p>Para que tus clientes puedan ingresar su DNI o CUIT al comprar, necesitas agregar el bloque <strong>Campo DNI/CUIT - Shopifac</strong> en el editor de checkout y activar el toggle <strong>"Activar campo DNI/CUIT"</strong>.</p>
+            <p>El campo DNI/CUIT aparece automaticamente en el checkout de tu tienda para que tus clientes puedan ingresar su documento al comprar. Este dato se usa para emitir la factura electronica.</p>
           </Banner>
         )}
         {isConfigured ? (

@@ -1,4 +1,4 @@
-api_version = "2025-04"
+api_version = "2026-01"
 
 [[extensions]]
 name = "t:name"
@@ -6,14 +6,13 @@ handle = "shopifac-checkout-dni"
 uid = "fd8da97f-bb70-39a0-cac4-432f3f1a9e550d309139"
 type = "ui_extension"
 
+[[extensions.targeting]]
+target = "purchase.checkout.contact.render-after"
+module = "./src/CheckoutDNI.js"
+
 [extensions.settings]
   [[extensions.settings.fields]]
   key = "enable_dni"
   type = "boolean"
   name = "t:settings.enable_dni.name"
   description = "t:settings.enable_dni.description"
-
-[[extensions.targeting]]
-target = "purchase.checkout.contact.render-after"
-module = "./src/CheckoutDNI.js"
-

@@ -5,7 +5,7 @@ import {
 } from '@shopify/ui-extensions/checkout';
 
 export default extension(
-    'purchase.checkout.block.render',
+    'purchase.checkout.contact.render-after',
     (root, api) => {
         const { applyAttributeChange, attributes, instructions, i18n } = api;
 
