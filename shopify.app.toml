@@ -27,3 +27,15 @@ redirect_urls = [ "https://shopify-facturante-saas-production-d49a.up.railway.ap
 
 [app_preferences]
 url = "https://shopify-facturante-saas-production-d49a.up.railway.app/admin"
+
+[[webhooks.subscriptions]]
+topics = ["customers/data_request"]
+uri = "/webhooks/shopify/customers-data-request"
+
+[[webhooks.subscriptions]]
+topics = ["customers/redact"]
+uri = "/webhooks/shopify/customers-redact"
+
+[[webhooks.subscriptions]]
+topics = ["shop/redact"]
+uri = "/webhooks/shopify/shop-redact"
