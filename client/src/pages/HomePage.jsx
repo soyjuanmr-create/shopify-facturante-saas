@@ -17,8 +17,9 @@ export default function HomePage() {
   );
 
   const shop = new URLSearchParams(window.location.search).get('shop') || '';
-  const checkoutEditorUrl = shop
-    ? `https://${shop}/admin/themes/current/editor?template=checkout`
+  const storeSlug = shop.replace('.myshopify.com', '');
+  const checkoutEditorUrl = storeSlug
+    ? `https://admin.shopify.com/store/${storeSlug}/settings/checkout`
     : 'https://admin.shopify.com';
 
   const load = useCallback(async () => {

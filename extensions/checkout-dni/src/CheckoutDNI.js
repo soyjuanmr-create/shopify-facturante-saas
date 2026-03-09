@@ -5,12 +5,9 @@ import {
 } from '@shopify/ui-extensions/checkout';
 
 export default extension(
-    'purchase.checkout.contact.render-after',
+    'purchase.checkout.block.render',
     (root, api) => {
-        const { applyAttributeChange, attributes, instructions, i18n, settings } = api;
-
-        // No renderizar si el merchant no habilitó el campo en el checkout editor
-        if (!settings.current.enable_dni) return;
+        const { applyAttributeChange, attributes, instructions, i18n } = api;
 
         const savedAttr = attributes.current.find(
             (a) => a.key === 'documento_identidad',
