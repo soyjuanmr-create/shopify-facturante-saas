@@ -142,7 +142,7 @@ export default function OrdersPage() {
                   <Text>Generar factura electronica via Facturante para esta orden?</Text>
                   {confirmOrder && confirmOrder.facturacion_status === 'failed' && (
                     <Banner tone="warning">
-                      <p>Si el error fue por falta de documento: ingresa el CUIT o DNI del cliente en el campo <strong>Empresa</strong> del pedido en Shopify antes de reintentar.</p>
+                      <p>Si el error fue por falta de documento: asegurate de que el cliente haya ingresado su DNI o CUIT en el checkout. Para ordenes existentes, podes editarlas en Shopify y agregar el atributo <strong>documento_identidad</strong> manualmente.</p>
                     </Banner>
                   )}
                   {isReprocess && <Banner tone="warning"><p>Este comprobante fue enviado previamente. Asegurate de haber anulado el comprobante anterior en Facturante antes de continuar.</p></Banner>}

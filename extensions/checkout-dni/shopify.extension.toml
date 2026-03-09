@@ -16,3 +16,4 @@ type = "ui_extension"
 [[extensions.targeting]]
 target = "purchase.checkout.contact.render-after"
 module = "./src/CheckoutDNI.js"
+

@@ -133,7 +133,7 @@ export default function SettingsPage() {
             <Card>
               <BlockStack gap="200">
                 <Text>Por defecto se emite Factura B. Si el cliente ingresa un CUIT valido, se emite Factura A.</Text>
-                <Banner tone="info"><p>Habilita el campo Empresa en Configuracion - Checkout y renombralo como CUIT / DNI.</p></Banner>
+                <Banner tone="info"><p>El campo DNI / CUIT se captura automaticamente en el checkout via la extension Shopifac.</p></Banner>
               </BlockStack>
             </Card>
           </Layout.AnnotatedSection>
