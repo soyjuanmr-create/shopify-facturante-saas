@@ -9,8 +9,10 @@ export default extension(
     (root, api) => {
         const { applyAttributeChange, attributes, instructions, i18n, settings } = api;
 
-        // No renderizar si el merchant no habilitó el campo en el checkout editor
-        // if (!settings.current.enable_dni) return;
+        // Visible por defecto. El merchant puede desactivarlo desde el editor de checkout
+        // si no necesita el campo (ej: tiendas solo B2C sin facturación electrónica).
+        if (settings.current.enable_dni === false) return;
+
         const savedAttr = attributes.current.find(
             (a) => a.key === 'documento_identidad',
         );

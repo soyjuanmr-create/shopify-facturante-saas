@@ -3,7 +3,7 @@ api_version = "2026-01"
 [[extensions]]
 name = "t:name"
 handle = "shopifac-checkout-dni"
-uid = "fd8da97f-bb70-39a0-cac4-432f3f1a9e550d309139"
+uid = "915f3fcc-451d-4257-99cb-7bda2f6d66b5"
 type = "ui_extension"
 
 [[extensions.targeting]]

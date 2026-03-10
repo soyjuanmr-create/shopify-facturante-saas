@@ -1,1 +1,8 @@
-{"name":"shopifac-checkout-dni","private":true,"version":"1.0.0","dependencies":{"@shopify/ui-extensions":"*","preact":"^10.19.0"}}
+{
+    "name": "shopifac-checkout-dni",
+    "private": true,
+    "version": "1.0.0",
+    "dependencies": {
+        "@shopify/ui-extensions": "2025.4.0"
+    }
+}
