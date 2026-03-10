@@ -2,10 +2,6 @@
     "name": "Campo DNI/CUIT - Shopifac",
     "label": "DNI / CUIT (para facturación electrónica)",
     "error_length": "Ingresá un DNI válido (7-8 dígitos) o CUIT/CUIL (11 dígitos)",
-    "settings": {
-        "enable_dni": {
-            "name": "Activar campo DNI/CUIT",
-            "description": "Muestra un campo DNI/CUIT en el checkout para facturación electrónica"
-        }
-    }
+    "save": "Guardar",
+    "saved": "✓ Tu DNI/CUIT fue registrado. La factura está en proceso."
 }
