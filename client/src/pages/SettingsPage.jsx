@@ -15,7 +15,7 @@ export default function SettingsPage() {
   const [puntoVenta, setPuntoVenta] = useState('1');
   const [autoInvoice, setAutoInvoice] = useState(false);
   const [isPlus, setIsPlus] = useState(false);
-  const [shopSlug, setShopSlug] = useState('');
+  const [themeLanguageUrl, setThemeLanguageUrl] = useState('');
   const orig = useRef({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false });
 
   const load = useCallback(async () => {
@@ -26,7 +26,10 @@ export default function SettingsPage() {
         var v = { empresa: d.settings.empresa, usuario: d.settings.usuario, hash: d.settings.hash, puntoVenta: d.settings.puntoVenta, autoInvoice: d.autoInvoice };
         setEmpresa(v.empresa); setUsuario(v.usuario); setHash(v.hash); setPuntoVenta(v.puntoVenta); setAutoInvoice(v.autoInvoice);
         setIsPlus(!!d.isPlus);
-        if (d.shopDomain) setShopSlug(d.shopDomain.replace('.myshopify.com', ''));
+        if (d.shopDomain && d.themeId) {
+          var slug = d.shopDomain.replace('.myshopify.com', '');
+          setThemeLanguageUrl('https://admin.shopify.com/store/' + slug + '/themes/' + d.themeId + '/language');
+        }
         orig.current = v;
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
@@ -110,8 +113,6 @@ export default function SettingsPage() {
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
-  var languagesUrl = 'https://admin.shopify.com/store/' + shopSlug + '/settings/languages';
-
   return (
     <Page title="Configuracion">
       <BlockStack gap="500">
@@ -146,7 +147,7 @@ export default function SettingsPage() {
                 <BlockStack gap="400">
                   <Text>Tu tienda no es Shopify Plus. Para capturar el DNI / CUIT del cliente, tenes que traducir el campo <Text as="span" fontWeight="bold">Empresa</Text> del checkout a <Text as="span" fontWeight="bold">DNI / CUIT</Text> desde la configuracion de idiomas de tu tienda.</Text>
                   <Text tone="subdued">El cliente ingresara su DNI o CUIT en ese campo al completar su direccion de envio o facturacion.</Text>
-                  <Button onClick={() => window.open(languagesUrl, '_top')}>
+                  <Button onClick={() => window.open(themeLanguageUrl, '_top')} disabled={!themeLanguageUrl}>
                     Ir a configuracion de idiomas
                   </Button>
                 </BlockStack>
