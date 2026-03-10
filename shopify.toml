@@ -10,7 +10,7 @@ scopes = "read_orders,write_orders"
 redirect_urls = ["https://shopify-facturante-saas-production-d49a.up.railway.app/api/auth/callback"]
 
 [webhooks]
-api_version = "2025-01"
+api_version = "2025-04"
 
   [[webhooks.subscriptions]]
   topics = ["orders/paid"]

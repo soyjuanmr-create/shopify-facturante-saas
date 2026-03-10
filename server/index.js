@@ -1,12 +1,4 @@
-﻿require('dotenv').config();
-
-// Capturar errores silenciosos sin matar el proceso
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION (server continues):', reason);
-});
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
-});
+require('dotenv').config();
 
 // Verificar variables requeridas antes de iniciar
 const required = ['SHOPIFY_API_KEY', 'SHOPIFY_API_SECRET', 'SHOPIFY_APP_URL', 'DATABASE_URL'];
@@ -38,7 +30,7 @@ var app = express();
 app.set('trust proxy', 1);
 var PORT = process.env.PORT || 3000;
 
-app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.shopify.com"], styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.shopify.com"], imgSrc: ["'self'", "data:", "https:", "http:"], connectSrc: ["'self'", "https://*.myshopify.com", "https://*.shopify.com"], frameSrc: ["'self'", "https://*.myshopify.com", "https://admin.shopify.com"], frameAncestors: ["https://admin.shopify.com", "https://*.myshopify.com"] } }, crossOriginEmbedderPolicy: false }));
+app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'", "https://cdn.shopify.com"], styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.shopify.com"], imgSrc: ["'self'", "data:", "https:", "http:"], connectSrc: ["'self'", "https://*.myshopify.com", "https://*.shopify.com"], frameSrc: ["'self'", "https://*.myshopify.com", "https://admin.shopify.com"], frameAncestors: ["https://admin.shopify.com", "https://*.myshopify.com"] } }, crossOriginEmbedderPolicy: false }));
 app.use(compression());
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 app.use(cors({ origin: true, credentials: true }));
@@ -71,7 +63,7 @@ app.get('/api/auth/callback', async function (req, res) {
     try {
       var axios = require('axios');
       var planResp = await axios.post(
-        'https://' + session.shop + '/admin/api/2025-01/graphql.json',
+        'https://' + session.shop + '/admin/api/2025-04/graphql.json',
         { query: '{ shop { plan { shopifyPlus } } }' },
         { headers: { 'X-Shopify-Access-Token': session.accessToken, 'Content-Type': 'application/json' } }
       );
