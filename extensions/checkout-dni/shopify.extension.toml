@@ -1,18 +1,14 @@
 api_version = "2026-01"
 
 [[extensions]]
-name = "t:name"
+name = "Campo DNI/CUIT - Shopifac"
 handle = "shopifac-checkout-dni"
 uid = "915f3fcc-451d-4257-99cb-7bda2f6d66b5"
 type = "ui_extension"
 
 [[extensions.targeting]]
-target = "purchase.checkout.contact.render-after"
+target = "purchase.checkout.block.render"
 module = "./src/CheckoutDNI.js"
 
-[extensions.settings]
-  [[extensions.settings.fields]]
-  key = "enable_dni"
-  type = "boolean"
-  name = "t:settings.enable_dni.name"
-  description = "t:settings.enable_dni.description"
+[extensions.capabilities]
+api_access = true
