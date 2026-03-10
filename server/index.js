@@ -65,16 +65,30 @@ app.get('/api/auth/callback', async function (req, res) {
     var session = callback.session;
     logger.info('OAuth callback: shop=' + session.shop + ' token=' + (session.accessToken ? session.accessToken.substring(0, 12) : 'EMPTY') + ' scope=' + session.scope);
     var prisma = require('./models/prisma');
+
+    // Detectar si el merchant es Shopify Plus
+    var isPlus = false;
+    try {
+      var axios = require('axios');
+      var planResp = await axios.post(
+        'https://' + session.shop + '/admin/api/2025-01/graphql.json',
+        { query: '{ shop { plan { shopifyPlus } } }' },
+        { headers: { 'X-Shopify-Access-Token': session.accessToken, 'Content-Type': 'application/json' } }
+      );
+      isPlus = planResp.data?.data?.shop?.plan?.shopifyPlus === true;
+      logger.info('OAuth callback: isPlus=' + isPlus + ' for ' + session.shop);
+    } catch (e) { logger.warn('Plan check error: ' + e.message); }
+
     await prisma.shop.upsert({
       where: { shopDomain: session.shop },
-      update: { accessToken: session.accessToken, status: 'active', lastAccessAt: new Date() },
-      create: { shopDomain: session.shop, accessToken: session.accessToken, status: 'active' },
+      update: { accessToken: session.accessToken, status: 'active', lastAccessAt: new Date(), isPlus },
+      create: { shopDomain: session.shop, accessToken: session.accessToken, status: 'active', isPlus },
     });
     logger.info('OAuth callback: Shop upserted in DB for ' + session.shop);
     try { await shopify.webhooks.register({ session: session }); } catch (e) { logger.warn('Webhook reg error: ' + e.message); }
 
-    // Activar extensión checkout DNI (fire-and-forget, no bloquea el OAuth)
-    activateCheckoutExtension(session.shop, session.accessToken);
+    // Activar extensión checkout DNI solo para merchants Plus (fire-and-forget)
+    if (isPlus) activateCheckoutExtension(session.shop, session.accessToken);
 
     // Billing: verificar si el merchant tiene un plan activo
     try {

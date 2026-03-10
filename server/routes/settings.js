@@ -11,6 +11,8 @@ router.get('/', async (req, res) => {
       settings: { empresa: shop.empresa || '', usuario: shop.usuario || '', hash: shop.hash ? String.fromCharCode(8226).repeat(6) : '', puntoVenta: shop.puntoVenta || '1' },
       autoInvoice: shop.autoInvoice,
       hasCredentials: !!(shop.empresa && shop.hash),
+      isPlus: shop.isPlus,
+      shopDomain: shop.shopDomain,
     });
   } catch (error) { res.status(500).json({ error: error.message }); }
 });

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, Layout, Card, FormLayout, TextField, Checkbox, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText } from '@shopify/polaris';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [hash, setHash] = useState('');
   const [puntoVenta, setPuntoVenta] = useState('1');
   const [autoInvoice, setAutoInvoice] = useState(false);
+  const [isPlus, setIsPlus] = useState(false);
+  const [shopSlug, setShopSlug] = useState('');
   const orig = useRef({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false });
 
   const load = useCallback(async () => {
@@ -23,6 +25,8 @@ export default function SettingsPage() {
       if (d.success) {
         var v = { empresa: d.settings.empresa, usuario: d.settings.usuario, hash: d.settings.hash, puntoVenta: d.settings.puntoVenta, autoInvoice: d.autoInvoice };
         setEmpresa(v.empresa); setUsuario(v.usuario); setHash(v.hash); setPuntoVenta(v.puntoVenta); setAutoInvoice(v.autoInvoice);
+        setIsPlus(!!d.isPlus);
+        if (d.shopDomain) setShopSlug(d.shopDomain.replace('.myshopify.com', ''));
         orig.current = v;
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
@@ -106,6 +110,8 @@ export default function SettingsPage() {
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
+  var languagesUrl = 'https://admin.shopify.com/store/' + shopSlug + '/settings/languages';
+
   return (
     <Page title="Configuracion">
       <BlockStack gap="500">
@@ -129,12 +135,22 @@ export default function SettingsPage() {
               <Checkbox label="Activar facturacion automatica" checked={autoInvoice} onChange={setAutoInvoice} helpText="Si desactivada, facturas manualmente desde Ordenes." />
             </Card>
           </Layout.AnnotatedSection>
-          <Layout.AnnotatedSection title="Tipo de factura" description="Determinacion automatica de Factura A o B.">
+          <Layout.AnnotatedSection title="Captura de DNI / CUIT" description="Como se obtiene el DNI o CUIT del cliente para determinar el tipo de factura (A o B).">
             <Card>
-              <BlockStack gap="200">
-                <Text>Por defecto se emite Factura B. Si el cliente ingresa un CUIT valido, se emite Factura A.</Text>
-                <Banner tone="info"><p>El campo DNI / CUIT se captura automaticamente en el checkout via la extension Shopifac.</p></Banner>
-              </BlockStack>
+              {isPlus ? (
+                <BlockStack gap="200">
+                  <Text>Tu tienda es Shopify Plus. El campo DNI / CUIT aparece automaticamente en el checkout via la extension de Shopifac.</Text>
+                  <Banner tone="success"><p>No necesitas hacer nada adicional.</p></Banner>
+                </BlockStack>
+              ) : (
+                <BlockStack gap="400">
+                  <Text>Tu tienda no es Shopify Plus. Para capturar el DNI / CUIT del cliente, tenes que traducir el campo <Text as="span" fontWeight="bold">Empresa</Text> del checkout a <Text as="span" fontWeight="bold">DNI / CUIT</Text> desde la configuracion de idiomas de tu tienda.</Text>
+                  <Text tone="subdued">El cliente ingresara su DNI o CUIT en ese campo al completar su direccion de envio o facturacion.</Text>
+                  <Button onClick={() => window.open(languagesUrl, '_top')}>
+                    Ir a configuracion de idiomas
+                  </Button>
+                </BlockStack>
+              )}
             </Card>
           </Layout.AnnotatedSection>
         </Layout>

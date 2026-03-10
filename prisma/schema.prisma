@@ -35,6 +35,7 @@ model Shop {
   hash          String?
   puntoVenta    String?   @default("1")
   autoInvoice   Boolean   @default(false)
+  isPlus        Boolean   @default(false)
   lastAccessAt  DateTime  @default(now())
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
