@@ -4,7 +4,7 @@ application_url = "https://shopify-facturante-saas-production-d49a.up.railway.ap
 embedded = true
 
 [access_scopes]
-scopes = "read_orders,write_orders"
+scopes = "read_orders,write_orders,read_themes"
 
 [auth]
 redirect_urls = ["https://shopify-facturante-saas-production-d49a.up.railway.app/api/auth/callback"]

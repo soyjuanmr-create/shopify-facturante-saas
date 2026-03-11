@@ -84,7 +84,7 @@ const customSessionStorage = {
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET,
-  scopes: (process.env.SCOPES || 'read_orders,write_orders').split(','),
+  scopes: (process.env.SCOPES || 'read_orders,write_orders,read_themes').split(','),
   hostName: (process.env.SHOPIFY_APP_URL || 'localhost:3000').replace(/https?:\/\//, ''),
   hostScheme: 'https',
   apiVersion: ApiVersion.April25,
