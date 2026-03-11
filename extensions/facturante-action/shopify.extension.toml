@@ -1,7 +1,7 @@
 api_version = "2026-01"
 
 [[extensions]]
-name = "t:name"
+name = "Generar Factura - Shopifac"
 handle = "shopifac-generate-invoice"
 uid = "ab4c5b68-d211-c35f-f844-ca51727389819920144d"
 type = "ui_extension"
