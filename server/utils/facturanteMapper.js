@@ -39,6 +39,9 @@
   }
 
   static determinarTipoComprobante(order) {
+    // Si el checkout guardó el tipo explícitamente: CUIL/DNI → siempre FB
+    var tipoDocAttr = (this._extraerAtributo(order, ['tipo_documento']) || '').toUpperCase();
+    if (tipoDocAttr === 'CUIL' || tipoDocAttr === 'DNI') return 'FB';
     var cuit = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI', 'documento_identidad']);
     if (!cuit) { var company = ((order.billing_address || {}).company || '').trim(); if (company.match(/^[0-9-]{10,13}$/)) cuit = company; }
     if (cuit) { var cleanCuit = cuit.replace(/\D/g, ''); if (cleanCuit.length === 11 && this.validarCUIT(cleanCuit)) return 'FA'; }
@@ -50,10 +53,12 @@
     var docValue = this._extraerAtributo(order, ['CUIT', 'Documento', 'DNI', 'documento_identidad', 'documento_numero']) || '';
     if (!docValue && billing.company) { var company = billing.company.trim(); if (company.match(/^[0-9-]{7,13}$/)) docValue = company; }
     var nroDoc = docValue.replace(/\D/g, '');
+    var tipoDocAttr = (this._extraerAtributo(order, ['tipo_documento']) || '').toUpperCase();
+    var tipoDoc = tipoDocAttr || (nroDoc.length === 11 ? 'CUIT' : (nroDoc.length >= 7 ? 'DNI' : 'CF'));
     return {
       nombre: ((billing.first_name || '') + ' ' + (billing.last_name || '')).trim() || 'Consumidor Final',
       email: order.email || order.contact_email || '',
-      tipo_documento: nroDoc.length === 11 ? 'CUIT' : (nroDoc.length >= 7 ? 'DNI' : 'CF'),
+      tipo_documento: tipoDoc,
       nro_documento: nroDoc,
       direccion: ((billing.address1 || '') + ' ' + (billing.address2 || '')).trim(),
       ciudad: billing.city || 'CABA',

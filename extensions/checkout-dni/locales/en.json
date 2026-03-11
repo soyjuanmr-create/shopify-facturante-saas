@@ -1,7 +1,8 @@
 {
     "name": "DNI/CUIT Field - Shopifac",
-    "label": "DNI / CUIT (for e-invoicing)",
-    "error_length": "Enter a valid DNI (7-8 digits) or CUIT/CUIL (11 digits)",
-    "save": "Save",
-    "saved": "✓ Your DNI/CUIT was registered. Invoice is being processed."
+    "needsInvoice": "I want to receive an electronic invoice",
+    "docType": "Document type",
+    "docNumber": "Document number",
+    "errorDni": "DNI must be 7 or 8 digits",
+    "errorCuit": "CUIT/CUIL must be 11 digits"
 }

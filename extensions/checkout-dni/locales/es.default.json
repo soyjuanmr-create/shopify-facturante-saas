@@ -1,7 +1,8 @@
 {
     "name": "Campo DNI/CUIT - Shopifac",
-    "label": "DNI / CUIT (para facturación electrónica)",
-    "error_length": "Ingresá un DNI válido (7-8 dígitos) o CUIT/CUIL (11 dígitos)",
-    "save": "Guardar",
-    "saved": "✓ Tu DNI/CUIT fue registrado. La factura está en proceso."
+    "needsInvoice": "Quiero recibir factura electrónica",
+    "docType": "Tipo de documento",
+    "docNumber": "Número de documento",
+    "errorDni": "El DNI debe tener 7 u 8 dígitos",
+    "errorCuit": "El CUIT/CUIL debe tener 11 dígitos"
 }

@@ -1,51 +1,78 @@
-import {
-    extension,
-    TextField,
-    BlockStack,
-} from '@shopify/ui-extensions/checkout';
+/** @jsxImportSource preact */
+import { useState } from 'preact/hooks';
 
-export default extension(
-    'purchase.checkout.block.render',
-    (root, api) => {
-        const { applyAttributeChange, attributes, instructions, i18n } = api;
+export default function CheckoutDNI() {
+  var [docType, setDocType] = useState('DNI');
+  var [docValue, setDocValue] = useState('');
+  var [error, setError] = useState('');
+  var [needsInvoice, setNeedsInvoice] = useState(false);
 
-        const savedAttr = attributes.current.find(
-            (a) => a.key === 'documento_identidad',
-        );
-        const initialValue = savedAttr ? savedAttr.value : '';
+  var validate = function (type, value) {
+    if (!value) return '';
+    if (type === 'DNI') return /^\d{7,8}$/.test(value) ? '' : shopify.i18n.translate('errorDni');
+    return /^\d{11}$/.test(value) ? '' : shopify.i18n.translate('errorCuit');
+  };
 
-        const textField = root.createComponent(TextField, {
-            label: i18n.translate('label'),
-            value: initialValue,
-            inputMode: 'numeric',
-            autocomplete: 'off',
-            onChange(newValue) {
-                const digits = (newValue || '').replace(/\D/g, '');
-                textField.updateProps({ value: digits, error: undefined });
-                if (!instructions.current.attributes.canUpdateAttributes) return;
-                applyAttributeChange({
-                    key: 'documento_identidad',
-                    type: 'updateAttribute',
-                    value: digits,
-                });
-            },
-            onBlur() {
-                const val = textField.props.value || '';
-                if (!val) {
-                    textField.updateProps({ error: undefined });
-                    return;
-                }
-                const len = val.length;
-                if (len < 7 || (len > 8 && len < 11) || len > 11) {
-                    textField.updateProps({ error: i18n.translate('error_length') });
-                } else {
-                    textField.updateProps({ error: undefined });
-                }
-            },
-        });
+  var saveAttr = async function (key, value) {
+    await shopify.applyAttributeChange({ type: 'updateAttribute', key: key, value: value });
+  };
 
-        const stack = root.createComponent(BlockStack);
-        stack.appendChild(textField);
-        root.appendChild(stack);
-    },
-);
+  var handleDoc = async function (value) {
+    var digits = value.replace(/\D/g, '');
+    setDocValue(digits);
+    var err = validate(docType, digits);
+    setError(err);
+    if (!err && digits) {
+      await saveAttr('documento_identidad', digits);
+      await saveAttr('tipo_documento', docType);
+    }
+  };
+
+  var handleTypeChange = async function (newType) {
+    setDocType(newType);
+    if (docValue) {
+      var err = validate(newType, docValue);
+      setError(err);
+      if (!err) await saveAttr('tipo_documento', newType);
+    }
+  };
+
+  var handleToggle = async function (checked) {
+    setNeedsInvoice(checked);
+    if (!checked) {
+      await saveAttr('documento_identidad', '');
+      await saveAttr('tipo_documento', '');
+      setDocValue('');
+      setError('');
+    }
+  };
+
+  return (
+    <s-section>
+      <s-checkbox checked={needsInvoice} onChange={(e) => handleToggle(e.target.checked)}>
+        {shopify.i18n.translate('needsInvoice')}
+      </s-checkbox>
+      {needsInvoice && (
+        <s-stack direction="block" gap="base">
+          <s-select
+            label={shopify.i18n.translate('docType')}
+            value={docType}
+            onChange={(e) => handleTypeChange(e.target.value)}
+          >
+            <option value="DNI">DNI</option>
+            <option value="CUIL">CUIL</option>
+            <option value="CUIT">CUIT</option>
+          </s-select>
+          <s-text-field
+            label={shopify.i18n.translate('docNumber') + ' (' + docType + ')'}
+            value={docValue}
+            onInput={(e) => handleDoc(e.target.value)}
+            error={error || undefined}
+            type="text"
+            autocomplete="off"
+          />
+        </s-stack>
+      )}
+    </s-section>
+  );
+}
