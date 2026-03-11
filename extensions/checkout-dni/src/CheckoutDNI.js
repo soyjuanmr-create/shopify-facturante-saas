@@ -1,7 +1,9 @@
 /** @jsxImportSource preact */
+import '@shopify/ui-extensions/preact';
+import { render } from 'preact';
 import { useState } from 'preact/hooks';
 
-export default function CheckoutDNI() {
+function CheckoutDNI() {
   var [docType, setDocType] = useState('DNI');
   var [docValue, setDocValue] = useState('');
   var [error, setError] = useState('');
@@ -75,4 +77,8 @@ export default function CheckoutDNI() {
       )}
     </s-section>
   );
+}
+
+export default function extension() {
+  render(<CheckoutDNI />, document.body);
 }
