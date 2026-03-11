@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
     let themeId = null;
     try {
       const themeResp = await axios.get(
-        `https://${shop.shopDomain}/admin/api/2025-01/themes.json?role=main`,
+        `https://${shop.shopDomain}/admin/api/2025-04/themes.json?role=main`,
         { headers: { 'X-Shopify-Access-Token': shop.accessToken } }
       );
       themeId = themeResp.data?.themes?.[0]?.id ?? null;

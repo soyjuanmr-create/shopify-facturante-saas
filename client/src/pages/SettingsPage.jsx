@@ -26,9 +26,12 @@ export default function SettingsPage() {
         var v = { empresa: d.settings.empresa, usuario: d.settings.usuario, hash: d.settings.hash, puntoVenta: d.settings.puntoVenta, autoInvoice: d.autoInvoice };
         setEmpresa(v.empresa); setUsuario(v.usuario); setHash(v.hash); setPuntoVenta(v.puntoVenta); setAutoInvoice(v.autoInvoice);
         setIsPlus(!!d.isPlus);
-        if (d.shopDomain && d.themeId) {
+        if (d.shopDomain) {
           var slug = d.shopDomain.replace('.myshopify.com', '');
-          setThemeLanguageUrl('https://admin.shopify.com/store/' + slug + '/themes/' + d.themeId + '/language');
+          var url = d.themeId
+            ? 'https://admin.shopify.com/store/' + slug + '/themes/' + d.themeId + '/language?query=empresa'
+            : 'https://admin.shopify.com/store/' + slug + '/themes';
+          setThemeLanguageUrl(url);
         }
         orig.current = v;
       }
