@@ -14,9 +14,11 @@
     "prisma:deploy": "npx prisma migrate deploy"
   },
   "dependencies": {
+    "@preact/signals": "^2.8.2",
     "@prisma/client": "^6.5.0",
     "@shopify/shopify-api": "^12.3.0",
     "@shopify/shopify-app-session-storage-prisma": "^8.0.1",
+    "@shopify/ui-extensions": "2026.1.1",
     "axios": "^1.7.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
@@ -26,6 +28,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "preact": "^10.28.4",
     "winston": "^3.17.0"
   },
   "devDependencies": {

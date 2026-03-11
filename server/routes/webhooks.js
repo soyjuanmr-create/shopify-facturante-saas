@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const prisma = require('../models/prisma');
@@ -128,16 +128,6 @@ function extractXmlTag(xml, tag) {
 
 router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
   try {
-    // Verificar token secreto (lo pedimos que nos reenvíe vía X-Facturante-Secret en el WebHook/Headers)
-    var facturanteSecret = process.env.FACTURANTE_WEBHOOK_SECRET;
-    if (facturanteSecret) {
-      var incomingSecret = req.headers['x-facturante-secret'];
-      if (incomingSecret !== facturanteSecret) {
-        logger.warn('Facturante webhook: token invalido, IP=' + (req.ip || 'unknown'));
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-    }
-
     var raw = req.body ? req.body.toString() : '';
     logger.info('Facturante webhook raw: ' + raw.substring(0, 800));
 

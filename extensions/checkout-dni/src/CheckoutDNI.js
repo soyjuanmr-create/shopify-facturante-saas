@@ -5,12 +5,9 @@ import {
 } from '@shopify/ui-extensions/checkout';
 
 export default extension(
-    'purchase.checkout.contact.render-after',
+    'purchase.checkout.block.render',
     (root, api) => {
-        const { applyAttributeChange, attributes, instructions, i18n, settings } = api;
-
-        // Visible por defecto. Solo se oculta si el merchant lo desactiva explícitamente.
-        if (settings.current?.enable_dni === false) return;
+        const { applyAttributeChange, attributes, instructions, i18n } = api;
 
         const savedAttr = attributes.current.find(
             (a) => a.key === 'documento_identidad',

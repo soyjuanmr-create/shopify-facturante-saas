@@ -1,4 +1,4 @@
-﻿const axios = require('axios');
+const axios = require('axios');
 const logger = require('../utils/logger');
 
 const ENDPOINT = 'https://www.facturante.com/api/Comprobantes.svc';
@@ -78,13 +78,10 @@ class FacturanteService {
     }).join('');
     // Construir nodo WebHook con headers:
     // 1) facturante-content-type: application/json → recibir webhook en JSON (más fácil de parsear)
-    // 2) X-Facturante-Secret: <secret> → Facturante lo reenvía en el POST, así validamos autenticidad
-    var webhookSecret = process.env.FACTURANTE_WEBHOOK_SECRET || '';
     var webhookXml = '';
     if (webhookUrl) {
       var headersXml =
-        '<fac2:Header><fac2:Nombre>facturante-content-type</fac2:Nombre><fac2:Valor>application/json</fac2:Valor></fac2:Header>' +
-        (webhookSecret ? '<fac2:Header><fac2:Nombre>X-Facturante-Secret</fac2:Nombre><fac2:Valor>' + this._esc(webhookSecret) + '</fac2:Valor></fac2:Header>' : '');
+        '<fac2:Header><fac2:Nombre>facturante-content-type</fac2:Nombre><fac2:Valor>application/json</fac2:Valor></fac2:Header>';
       webhookXml = '<fac1:WebHook><fac2:Url>' + this._esc(webhookUrl) + '</fac2:Url><fac2:Headers>' + headersXml + '</fac2:Headers></fac1:WebHook>';
     }
     var nroDoc = (cliente.nro_documento || '').toString().replace(/\D/g, '');

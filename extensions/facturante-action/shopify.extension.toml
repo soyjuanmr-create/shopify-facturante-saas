@@ -1,4 +1,4 @@
-api_version = "2025-04"
+api_version = "2026-01"
 
 [[extensions]]
 name = "t:name"
@@ -7,5 +7,9 @@ uid = "ab4c5b68-d211-c35f-f844-ca51727389819920144d"
 type = "ui_extension"
 
 [[extensions.targeting]]
-module = "./src/ActionExtension.jsx"
 target = "admin.order-details.action.render"
+module = "./src/ActionExtension.jsx"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
