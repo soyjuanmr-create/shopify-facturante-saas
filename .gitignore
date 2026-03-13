@@ -11,6 +11,11 @@ extensions/*/node_modules/
 
 # Build output
 client/dist/
+extensions/*/dist/
+
+# Specs/docs internas de IA
+facturante_crearcomprobante_spec.md
+SHOPIFAC_SKILL.md
 
 # Logs
 logs/
