@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 client_id = "2b4a5e3ce5dd4d99a19e30ec5c94803b"
 name = "facturante-conector"
-application_url = "https://shopify-facturante-saas-production-d49a.up.railway.app"
+application_url = "https://shopifac-production.up.railway.app"
 embedded = true
 
 [webhooks]
@@ -25,7 +25,7 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://shopify-facturante-saas-production-d49a.up.railway.app/api/auth/callback" ]
+redirect_urls = [ "https://shopifac-production.up.railway.app/api/auth/callback" ]
 
 [app_preferences]
-url = "https://shopify-facturante-saas-production-d49a.up.railway.app/admin"
+url = "https://shopifac-production.up.railway.app/admin"
