@@ -1,31 +1,35 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
 client_id = "2b4a5e3ce5dd4d99a19e30ec5c94803b"
-name = "facturante-conector"
+name = "shopifac"
 application_url = "https://shopifac-production.up.railway.app"
 embedded = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-01"
 
-[[webhooks.subscriptions]]
-topics = ["orders/paid"]
-uri = "/webhooks/shopify/order-paid"
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shopify/gdpr"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
-[[webhooks.subscriptions]]
-topics = ["app/uninstalled"]
-uri = "/webhooks/shopify/uninstall"
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "/webhooks/shopify/order-paid"
 
-[[webhooks.subscriptions]]
-compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "/webhooks/shopify/gdpr"
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/shopify/uninstall"
 
 [access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_customers,read_orders,write_orders,read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://shopifac-production.up.railway.app/api/auth/callback" ]
+redirect_urls = [
+  "https://shopifac-production.up.railway.app/api/auth/callback"
+]
 
 [app_preferences]
 url = "https://shopifac-production.up.railway.app/admin"

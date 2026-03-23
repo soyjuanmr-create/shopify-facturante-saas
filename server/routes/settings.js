@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const prisma = require('../models/prisma');
 const axios = require('axios');
@@ -6,7 +6,7 @@ const axios = require('axios');
 router.get('/', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
-    if (!shop) return res.status(404).json({ error: 'Shop not found' });
+    if (!shop) return res.status(403).json({ error: 'Shop not found', authRequired: true });
 
     // Obtener ID del tema publicado para construir la URL del editor de idiomas
     let themeId = null;

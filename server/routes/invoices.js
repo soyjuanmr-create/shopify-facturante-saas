@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const prisma = require('../models/prisma');
 const axios = require('axios');
@@ -28,7 +28,7 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
 router.get('/orders', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
-    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
+    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa', authRequired: true });
 
     // Priorizar Session table; fallback a Shop table
     const sessionRecord = await prisma.session.findFirst({
