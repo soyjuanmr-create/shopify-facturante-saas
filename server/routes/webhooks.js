@@ -62,7 +62,7 @@ router.post('/shopify/order-paid', async (req, res) => {
   } catch (error) { logger.error('Webhook order-paid error: ' + error.message); }
 });
 
-router.post('/shopify/app-uninstalled', async (req, res) => {
+router.post('/shopify/uninstall', async (req, res) => {
   try {
     var hmac = req.headers['x-shopify-hmac-sha256'];
     if (!verifyHmac(req.body, hmac)) return res.status(401).send('Unauthorized');
@@ -72,7 +72,7 @@ router.post('/shopify/app-uninstalled', async (req, res) => {
   } catch (error) { logger.error('Uninstall error: ' + error.message); if (!res.headersSent) res.status(200).send('OK'); }
 });
 
-router.post('/shopify', async (req, res) => {
+router.post('/shopify/gdpr', async (req, res) => {
   var hmac = req.headers['x-shopify-hmac-sha256'];
   if (!verifyHmac(req.body, hmac)) return res.status(401).send('Unauthorized');
 
