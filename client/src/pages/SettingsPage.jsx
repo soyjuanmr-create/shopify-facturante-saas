@@ -77,7 +77,7 @@ export default function SettingsPage() {
     document.addEventListener('shopifac:doSave', doSave);
     document.addEventListener('shopifac:doDiscard', doDiscard);
     return function() { document.removeEventListener('shopifac:doSave', doSave); document.removeEventListener('shopifac:doDiscard', doDiscard); };
-  });
+  }, [handleSave]);
 
   function validate() {
     var e = {};
