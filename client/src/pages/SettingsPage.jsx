@@ -117,7 +117,7 @@ export default function SettingsPage() {
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
   return (
-    <Page title="Configuracion">
+    <Page title="Configuracion" primaryAction={{ content: 'Guardar', onAction: handleSave, loading: saving }}>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         <Layout>
@@ -157,6 +157,11 @@ export default function SettingsPage() {
               )}
             </Card>
           </Layout.AnnotatedSection>
+          <Layout.Section>
+            <InlineStack align="end">
+              <Button variant="primary" onClick={handleSave} loading={saving}>Guardar configuracion</Button>
+            </InlineStack>
+          </Layout.Section>
         </Layout>
       </BlockStack>
     </Page>
