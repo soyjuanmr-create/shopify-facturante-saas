@@ -110,6 +110,7 @@ export default function SettingsPage() {
       await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
       setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
       orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
+      if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar');
       if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch]);
