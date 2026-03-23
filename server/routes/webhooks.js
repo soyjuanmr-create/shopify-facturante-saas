@@ -68,7 +68,20 @@ router.post('/shopify/uninstall', async (req, res) => {
     if (!verifyHmac(req.body, hmac)) return res.status(401).send('Unauthorized');
     var shopDomain = req.headers['x-shopify-shop-domain'];
     res.status(200).send('OK');
-    await prisma.shop.update({ where: { shopDomain: shopDomain }, data: { status: 'uninstalled' } });
+    // Limpiar credenciales sensibles y sesiones al desinstalar
+    await prisma.shop.update({
+      where: { shopDomain: shopDomain },
+      data: {
+        status: 'inactive',
+        empresa: null,
+        usuario: null,
+        hash: null,
+        puntoVenta: '1',
+        autoInvoice: false,
+      },
+    });
+    await prisma.session.deleteMany({ where: { shop: shopDomain } });
+    logger.info('Uninstall: shop=' + shopDomain + ' datos sensibles limpiados y sesiones borradas.');
   } catch (error) { logger.error('Uninstall error: ' + error.message); if (!res.headersSent) res.status(200).send('OK'); }
 });
 
