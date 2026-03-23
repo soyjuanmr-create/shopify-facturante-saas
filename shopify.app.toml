@@ -1,5 +1,5 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-client_id = "ddb03a81b1ffb2422828a5e3e5d8f177"
+client_id = "2b4a5e3ce5dd4d99a19e30ec5c94803b"
 name = "facturante-conector"
 application_url = "https://shopify-facturante-saas-production-d49a.up.railway.app"
 embedded = true
