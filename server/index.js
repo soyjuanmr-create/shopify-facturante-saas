@@ -105,7 +105,8 @@ app.get('/api/auth/callback', async function (req, res) {
       logger.warn('Billing check error (no bloqueante): ' + billingErr.message);
     }
 
-    res.redirect('/?shop=' + session.shop + '&host=' + req.query.host);
+    var host = req.query.host || '';
+    res.redirect('/?shop=' + session.shop + (host ? '&host=' + host : ''));
   } catch (error) { logger.error('OAuth error: ' + error.message); res.status(500).send('Auth error: ' + error.message); }
 });
 

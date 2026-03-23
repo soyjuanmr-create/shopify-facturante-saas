@@ -9,6 +9,3 @@ cmds = [
   'cd client && npm run build',
   'npx prisma generate'
 ]
-
-[start]
-cmd = 'npx prisma migrate deploy && npm start'
