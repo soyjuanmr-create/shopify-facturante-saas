@@ -95,21 +95,14 @@ router.post('/generate', async (req, res) => {
       });
     }
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
-    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
+    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
     let orderData;
-    try {
-      orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
-    } catch (gqlErr) {
-      if (gqlErr.message && (gqlErr.message.includes('ACCESS_DENIED') || gqlErr.message.includes('protected') || gqlErr.message.includes('customer'))) {
-        return res.status(403).json({ error: 'La app necesita aprobación de Shopify para acceder a datos de clientes. Ejecutá "shopify app deploy" para solicitar acceso.' });
-      }
-      throw gqlErr;
-    }
+    orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
     const gqlOrder = orderData.data ? orderData.data.order : null;
     if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
     const ba = gqlOrder.billingAddress || {};
     const orderForMapper = {
-      id: orderId, name: gqlOrder.name, order_number: gqlOrder.name, email: gqlOrder.email,
+      id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
       total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
       billing_address: { first_name: ba.firstName, last_name: ba.lastName, address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
       note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
