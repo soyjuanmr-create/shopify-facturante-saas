@@ -150,7 +150,13 @@ router.post('/generate', async (req, res) => {
       ? 'Factura emitida. CAE: ' + invoiceCae
       : 'Comprobante enviado a Facturante (ID: ' + resultado2.idComprobante + '). Esperando autorizacion...';
     res.json({ success: true, message: msg2, status: invoiceStatus });
-  } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
+  } catch (error) {
+    logger.error('Generate invoice error: ' + error.message);
+    if (error.authRequired) {
+      return res.status(403).json({ error: 'Token de acceso expirado. Reabrí la app desde el admin de Shopify.', authRequired: true });
+    }
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Endpoint de polling manual: consulta el estado real a Facturante y actualiza la BD
