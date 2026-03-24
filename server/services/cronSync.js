@@ -51,6 +51,18 @@ async function syncProcessingInvoices() {
         }
 
         try {
+            // PASO 1: Verificar que siga en estado 'processing' ANTES de consultar
+            // (podría haber sido actualizado por webhook en el interim)
+            const currentInvoice = await prisma.invoice.findUnique({
+                where: { id: invoice.id }
+            });
+
+            if (currentInvoice.status !== 'processing') {
+                logger.info('[cronSync] invoice ' + invoice.shopifyOrderId + ' ya no está en processing (status=' + currentInvoice.status + '), saltando');
+                continue;
+            }
+
+            // PASO 2: Consultar Facturante
             const facturante = new FacturanteService({
                 empresa: shop.empresa,
                 usuario: shop.usuario,
@@ -63,36 +75,62 @@ async function syncProcessingInvoices() {
 
             const estadoOk = result.estado === 'autorizado' || result.estado === 'ok';
 
-            if (estadoOk) {
-                const caeStr = result.cae ? result.cae.toString() : (invoice.cae || null);
+            if (estadoOk && result.cae) {
+                const caeStr = result.cae.toString();
                 const numStr = result.numero ? result.numero.toString() : (invoice.facturanteInvoiceNumber || null);
 
-                await prisma.invoice.update({
-                    where: { id: invoice.id },
-                    data: { status: 'completed', cae: caeStr, facturanteInvoiceNumber: numStr, processedAt: new Date() },
+                // PASO 3: Actualizar BD de forma atómica (si sigue en processing)
+                const updated = await prisma.invoice.updateMany({
+                    where: {
+                        id: invoice.id,
+                        status: 'processing'  // ← Condición: solo si SIGUE en processing
+                    },
+                    data: {
+                        status: 'completed',
+                        cae: caeStr,
+                        facturanteInvoiceNumber: numStr,
+                        processedAt: new Date()
+                    },
                 });
 
-                // Actualizar metafields en Shopify si tenemos token
+                if (updated.count === 0) {
+                    logger.info('[cronSync] orderId=' + invoice.shopifyOrderId + ' ya fue actualizado por otro proceso (webhook?), saltando metafields');
+                    continue;
+                }
+
+                // PASO 4: Escribir metafields solo si LOGRAMOS actualizar
                 const sessionRec = await prisma.session.findFirst({
                     where: { shop: shop.shopDomain, isOnline: false },
                     orderBy: { expires: 'desc' },
                 });
                 const accessToken = (sessionRec && sessionRec.accessToken) ? sessionRec.accessToken : shop.accessToken;
+
                 if (accessToken) {
-                    await setInvoiceMetafields(
-                        { shop: shop.shopDomain, accessToken },
-                        invoice.shopifyOrderId,
-                        { status: 'completed', cae: caeStr, invoiceNumber: numStr }
-                    );
+                    try {
+                        await setInvoiceMetafields(
+                            { shop: shop.shopDomain, accessToken },
+                            invoice.shopifyOrderId,
+                            { status: 'completed', cae: caeStr, invoiceNumber: numStr }
+                        );
+                    } catch (metaErr) {
+                        logger.warn('[cronSync] Falla al escribir metafields para ' + invoice.shopifyOrderId + ': ' + metaErr.message);
+                        // No romper el flujo
+                    }
                 }
 
-                logger.info('[cronSync] ✓ orderId=' + invoice.shopifyOrderId + ' actualizado a completed. CAE=' + caeStr);
+                logger.info('[cronSync] ✓ orderId=' + invoice.shopifyOrderId + ' completado. CAE=' + caeStr);
 
             } else if (result.estado && result.estado !== 'procesando' && result.estado !== 'processing') {
                 // Estado inesperado (no es éxito ni "aún procesando") → marcar como fallido
-                await prisma.invoice.update({
-                    where: { id: invoice.id },
-                    data: { status: 'failed', errorMessage: result.mensaje || result.estado },
+                await prisma.invoice.updateMany({
+                    where: {
+                        id: invoice.id,
+                        status: 'processing'
+                    },
+                    data: {
+                        status: 'failed',
+                        errorMessage: result.mensaje || result.estado,
+                    },
                 });
                 logger.warn('[cronSync] ✗ orderId=' + invoice.shopifyOrderId + ' marcado failed. estado=' + result.estado);
             }
