@@ -20,7 +20,9 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   } catch (err) {
     if (err.response) {
       const detail = JSON.stringify(err.response.data);
-      throw new Error('Shopify ' + err.response.status + ' for ' + shopDomain + ' tok=' + (accessToken || '').substring(0, 12) + ': ' + detail);
+      const e = new Error('Shopify ' + err.response.status + ' for ' + shopDomain + ' tok=' + (accessToken || '').substring(0, 12) + ': ' + detail);
+      if (err.response.status === 401) e.authRequired = true;
+      throw e;
     }
     throw err;
   }
@@ -53,7 +55,13 @@ router.get('/orders', async (req, res) => {
       return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
-  } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: error.message }); }
+  } catch (error) {
+    logger.error('Error loading orders: ' + error.message);
+    if (error.authRequired || error.message.includes('401')) {
+      return res.status(403).json({ error: 'Token de acceso expirado. Re-autorizando...', authRequired: true });
+    }
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.get('/stats', async (req, res) => {
