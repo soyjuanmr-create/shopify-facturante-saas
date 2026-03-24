@@ -115,14 +115,18 @@ router.post('/shopify/gdpr', async (req, res) => {
       logger.info('customers/redact processed for ' + shopDomain);
 
     } else if (topic === 'shop/redact') {
-      // Delete all shop data 48h after uninstall
+      // Delete all shop data 48h after uninstall — only if shop is still inactive (not reinstalled)
       var shop = await prisma.shop.findUnique({ where: { shopDomain: shopDomain } });
-      if (shop) {
+      if (shop && shop.status === 'inactive') {
         await prisma.invoice.deleteMany({ where: { shopId: shop.id } });
         await prisma.session.deleteMany({ where: { shop: shopDomain } });
         await prisma.shop.delete({ where: { shopDomain: shopDomain } });
+        logger.info('shop/redact processed for ' + shopDomain);
+      } else if (shop && shop.status === 'active') {
+        logger.info('shop/redact ignored for ' + shopDomain + ' — shop was reinstalled');
+      } else {
+        logger.info('shop/redact processed for ' + shopDomain + ' — shop not found, nothing to delete');
       }
-      logger.info('shop/redact processed for ' + shopDomain);
 
     } else if (topic === 'customers/data_request') {
       // This app stores: customerName, customerEmail on Invoice records
