@@ -44,7 +44,7 @@ router.get('/orders', async (req, res) => {
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { displayName } } } } }';
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } } } } }';
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
@@ -52,9 +52,7 @@ router.get('/orders', async (req, res) => {
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      var displayName = order.customer ? order.customer.displayName : null;
-      var nameParts = displayName ? displayName.split(' ') : [];
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: displayName ? { first_name: nameParts[0] || '', last_name: nameParts.slice(1).join(' ') || '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
   } catch (error) {

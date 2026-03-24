@@ -84,8 +84,7 @@ export default function OrdersPage() {
     if (!search) return true;
     var q = search.toLowerCase();
     var num = (o.order_number || '').toLowerCase();
-    var client = o.customer ? ((o.customer.first_name || '') + ' ' + (o.customer.last_name || '')).toLowerCase() : '';
-    return num.includes(q) || client.includes(q);
+    return num.includes(q);
   });
 
   if (loading) return (<Page title="Ordenes"><Layout><Layout.Section><Card><SkeletonBodyText lines={8} /></Card></Layout.Section></Layout></Page>);
@@ -106,7 +105,7 @@ export default function OrdersPage() {
               {filtered.map((o, i) => (
                 <IndexTable.Row id={o.id} key={o.id} position={i}>
                   <IndexTable.Cell><Text fontWeight="bold">#{o.order_number}</Text></IndexTable.Cell>
-                  <IndexTable.Cell>{o.customer ? ((o.customer.first_name || '') + ' ' + (o.customer.last_name || '')).trim() : 'Consumidor Final'}</IndexTable.Cell>
+                  <IndexTable.Cell>{o.customer ? ((o.customer.first_name || '') + ' ' + (o.customer.last_name || '')).trim() || 'Cliente' : '—'}</IndexTable.Cell>
                   <IndexTable.Cell>${parseFloat(o.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</IndexTable.Cell>
                   <IndexTable.Cell>{new Date(o.created_at).toLocaleDateString('es-AR')}</IndexTable.Cell>
                   <IndexTable.Cell>{statusBadge(o)}</IndexTable.Cell>
