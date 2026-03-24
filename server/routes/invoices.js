@@ -6,6 +6,7 @@ const FacturanteMapper = require('../utils/facturanteMapper');
 const FacturanteService = require('../services/facturante');
 const logger = require('../utils/logger');
 const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
+const { getValidAccessToken } = require('../utils/tokenUtils');
 
 async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   const url = 'https://' + shopDomain + '/admin/api/2025-04/graphql.json';
@@ -30,16 +31,14 @@ router.get('/orders', async (req, res) => {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa', authRequired: true });
 
-    // Priorizar Session table; fallback a Shop table
-    const sessionRecord = await prisma.session.findFirst({
-      where: { shop: req.shopDomain, isOnline: false },
-      orderBy: { expires: 'desc' },
-    });
-    const accessToken = (sessionRecord && sessionRecord.accessToken) ? sessionRecord.accessToken : shop.accessToken;
+    const accessToken = await getValidAccessToken(req.shopDomain, shop);
 
-    logger.info('Orders: shop=' + req.shopDomain + ' sessionTable=' + (sessionRecord ? 'found,tok=' + (sessionRecord.accessToken || '').substring(0, 8) : 'NOT FOUND') + ' shopTable=tok=' + (shop.accessToken || '').substring(0, 8));
-
-    if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
+    if (!accessToken) {
+      return res.status(403).json({
+        error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).',
+        authRequired: true
+      });
+    }
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
@@ -80,12 +79,13 @@ router.post('/generate', async (req, res) => {
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
     const existing = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
     if (existing && existing.status === 'completed') return res.json({ success: true, message: 'Factura ya emitida. CAE: ' + existing.cae });
-    const sessionRecord2 = await prisma.session.findFirst({
-      where: { shop: shop.shopDomain, isOnline: false },
-      orderBy: { expires: 'desc' },
-    });
-    const accessToken2 = (sessionRecord2 && sessionRecord2.accessToken) ? sessionRecord2.accessToken : shop.accessToken;
-    if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
+    const accessToken2 = await getValidAccessToken(shop.shopDomain, shop);
+    if (!accessToken2) {
+      return res.status(403).json({
+        error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).',
+        authRequired: true
+      });
+    }
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
     const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
     const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
