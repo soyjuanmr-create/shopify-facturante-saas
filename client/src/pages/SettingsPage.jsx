@@ -56,6 +56,7 @@ export default function SettingsPage() {
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
         if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
+        if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar');
         await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
