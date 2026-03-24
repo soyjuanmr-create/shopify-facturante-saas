@@ -96,13 +96,11 @@ export default function SettingsPage() {
       if (hash !== String.fromCharCode(8226).repeat(6)) body.hash = hash.trim();
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
-        orig.current = { empresa: body.empresa, usuario: body.usuario, hash: hash, puntoVenta: body.puntoVenta, autoInvoice: autoInvoice };
-        // Hide save bar explicitly — orig.current is a ref so the comparison useEffect won't re-run automatically
-        if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar');
         if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
+        await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
-  }, [fetch, empresa, usuario, hash, puntoVenta, autoInvoice]);
+  }, [fetch, load, empresa, usuario, hash, puntoVenta, autoInvoice]);
 
   const handleDisconnect = useCallback(async () => {
     setSaving(true);

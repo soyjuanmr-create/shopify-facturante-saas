@@ -58,18 +58,7 @@ export default function HomePage() {
             <p>Agrega el bloque "Campo DNI/CUIT - Shopifac" en el editor de checkout para que tus clientes puedan ingresar su documento al comprar. Este dato se usa para emitir la factura electronica.</p>
           </Banner>
         )}
-        {isConfigured && !settings.isPlus && !dniBannerDismissed && (
-          <Banner
-            title="DNI/CUIT del cliente"
-            tone="info"
-            onDismiss={() => {
-              localStorage.setItem('shopifac_dni_banner_dismissed', '1');
-              setDniBannerDismissed(true);
-            }}
-          >
-            <p>El DNI/CUIT se ingresa al generar cada factura desde la seccion Ordenes. El campo automatico en el checkout esta disponible para tiendas con plan Shopify Plus.</p>
-          </Banner>
-        )}
+
         {isConfigured ? (
           <Banner title="Facturante conectado" tone="success">
             <p>Las facturas se {settings.autoInvoice ? 'emiten automaticamente al recibir un pago' : 'pueden emitir manualmente desde Ordenes'}.</p>
