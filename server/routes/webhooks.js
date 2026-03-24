@@ -56,30 +56,36 @@ router.post('/shopify/order-paid', async (req, res) => {
 
     logger.info('Normalized ' + orderData.line_items.length + ' line items for order ' + orderData.name);
     var facturaData = FacturanteMapper.mapShopifyToFacturante(orderData);
-    var status = 'pending', facturanteId = null, errorMsg = null, caeInline = null, numeroInline = null;
+
+    // Siempre guardar datos del webhook: el REST payload tiene nombre/email completos
+    // aunque no esté aprobado el acceso a datos protegidos en Partner Dashboard
+    await prisma.invoice.create({ data: { shopId: shop.id, shopifyOrderId: orderData.id.toString(), shopifyOrderNumber: (orderData.order_number || orderData.name).toString(), customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'pending', invoiceData: facturaData } });
+    logger.info('Order ' + orderData.name + ' saved as pending');
+
     if (shop.autoInvoice && shop.hash && shop.empresa) {
+      var autoStatus = 'pending', facturanteId = null, errorMsg = null, caeInline = null, numeroInline = null;
       try {
         var facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
         var webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
         var resultado = await facturante.crearComprobante(facturaData, webhookUrl);
         facturanteId = resultado.idComprobante ? resultado.idComprobante.toString() : null;
         if (resultado.autorizado && resultado.cae) {
-          // Facturante autorizó sincrónicamente — no necesitamos esperar el webhook
-          status = 'completed'; caeInline = resultado.cae.toString(); numeroInline = resultado.numero ? resultado.numero.toString() : null;
+          autoStatus = 'completed'; caeInline = resultado.cae.toString(); numeroInline = resultado.numero ? resultado.numero.toString() : null;
         } else {
-          status = 'processing';
+          autoStatus = 'processing';
         }
-      } catch (e) { status = 'failed'; errorMsg = e.message; }
-    }
-    await prisma.invoice.create({ data: { shopId: shop.id, shopifyOrderId: orderData.id.toString(), shopifyOrderNumber: (orderData.order_number || orderData.name).toString(), customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: status, facturanteInvoiceId: facturanteId, cae: caeInline, facturanteInvoiceNumber: numeroInline, processedAt: status === 'completed' ? new Date() : null, errorMessage: errorMsg, invoiceData: facturaData } });
-    logger.info('Order ' + orderData.name + ' processed (' + status + ')');
-    // Si ya está completado inline, escribir metafields a Shopify
-    if (status === 'completed' && caeInline) {
-      var sessionRec = await prisma.session.findFirst({ where: { shop: shopDomain, isOnline: false }, orderBy: { expires: 'desc' } });
-      var tokForMeta = (sessionRec && sessionRec.accessToken) ? sessionRec.accessToken : shop.accessToken;
-      if (tokForMeta) {
-        var sessionObj = { shop: shopDomain, accessToken: tokForMeta };
-        await setInvoiceMetafields(sessionObj, orderData.id.toString(), { status: 'completed', cae: caeInline, invoiceNumber: numeroInline });
+      } catch (e) { autoStatus = 'failed'; errorMsg = e.message; }
+
+      await prisma.invoice.update({ where: { shopifyOrderId: orderData.id.toString() }, data: { status: autoStatus, facturanteInvoiceId: facturanteId, cae: caeInline, facturanteInvoiceNumber: numeroInline, processedAt: autoStatus === 'completed' ? new Date() : null, errorMessage: errorMsg } });
+      logger.info('Order ' + orderData.name + ' autoInvoice processed (' + autoStatus + ')');
+
+      // Si ya está completado inline, escribir metafields a Shopify
+      if (autoStatus === 'completed' && caeInline) {
+        var sessionRec = await prisma.session.findFirst({ where: { shop: shopDomain, isOnline: false }, orderBy: { expires: 'desc' } });
+        var tokForMeta = (sessionRec && sessionRec.accessToken) ? sessionRec.accessToken : shop.accessToken;
+        if (tokForMeta) {
+          await setInvoiceMetafields({ shop: shopDomain, accessToken: tokForMeta }, orderData.id.toString(), { status: 'completed', cae: caeInline, invoiceNumber: numeroInline });
+        }
       }
     }
   } catch (error) { logger.error('Webhook order-paid error: ' + error.message); }

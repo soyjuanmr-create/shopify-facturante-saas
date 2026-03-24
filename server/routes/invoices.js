@@ -48,11 +48,11 @@ router.get('/orders', async (req, res) => {
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
-    const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } } });
+    const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } }, select: { shopifyOrderId: true, status: true, cae: true, errorMessage: true, customerName: true } });
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: (inv && inv.customerName) ? { first_name: inv.customerName, last_name: '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
   } catch (error) {
@@ -104,11 +104,28 @@ router.post('/generate', async (req, res) => {
     const orderForMapper = {
       id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
       total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
-      billing_address: { first_name: ba.firstName, last_name: ba.lastName, address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
+      billing_address: { first_name: ba.firstName || '', last_name: ba.lastName || '', address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
       note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
       line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
       shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
     };
+    // Fallback: si GraphQL no devolvió nombre (campo protegido aún no aprobado), usar datos del webhook guardados
+    if (!orderForMapper.billing_address.first_name && !orderForMapper.billing_address.last_name) {
+      const existingInv = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+      if (existingInv && existingInv.invoiceData) {
+        const savedData = typeof existingInv.invoiceData === 'string' ? JSON.parse(existingInv.invoiceData) : existingInv.invoiceData;
+        if (savedData.cliente && savedData.cliente.nombre && savedData.cliente.nombre !== 'Consumidor Final') {
+          logger.info('Generate: usando nombre del webhook: ' + savedData.cliente.nombre);
+          var parts = savedData.cliente.nombre.split(' ');
+          orderForMapper.billing_address.first_name = parts[0] || '';
+          orderForMapper.billing_address.last_name = parts.slice(1).join(' ') || '';
+        }
+        if (!orderForMapper.email && savedData.cliente && savedData.cliente.email) {
+          orderForMapper.email = savedData.cliente.email;
+        }
+      }
+    }
+
     logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
     const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
     logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function (i) { return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
