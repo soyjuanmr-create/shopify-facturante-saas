@@ -44,7 +44,7 @@ router.get('/orders', async (req, res) => {
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }';
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { displayName } } } } }';
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
@@ -52,7 +52,9 @@ router.get('/orders', async (req, res) => {
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
+      var displayName = order.customer ? order.customer.displayName : null;
+      var nameParts = displayName ? displayName.split(' ') : [];
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: displayName ? { first_name: nameParts[0] || '', last_name: nameParts.slice(1).join(' ') || '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
   } catch (error) {
@@ -96,7 +98,15 @@ router.post('/generate', async (req, res) => {
     }
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
     const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
-    const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+    let orderData;
+    try {
+      orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+    } catch (gqlErr) {
+      if (gqlErr.message && (gqlErr.message.includes('ACCESS_DENIED') || gqlErr.message.includes('protected') || gqlErr.message.includes('customer'))) {
+        return res.status(403).json({ error: 'La app necesita aprobación de Shopify para acceder a datos de clientes. Ejecutá "shopify app deploy" para solicitar acceso.' });
+      }
+      throw gqlErr;
+    }
     const gqlOrder = orderData.data ? orderData.data.order : null;
     if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
     const ba = gqlOrder.billingAddress || {};

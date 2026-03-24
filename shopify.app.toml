@@ -26,6 +26,17 @@ scopes = "read_customers,read_orders,write_orders,read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
+[access_scopes.protected_customer_data_access]
+reason = "App needs customer name and email to generate legal electronic invoices (facturas electrónicas) as required by Argentina's tax authority (AFIP)."
+
+[[access_scopes.protected_customer_data_access.fields]]
+field = "name"
+reason = "Required on the electronic invoice as the customer's legal name per AFIP regulations."
+
+[[access_scopes.protected_customer_data_access.fields]]
+field = "email"
+reason = "Required to send the electronic invoice to the customer."
+
 [auth]
 redirect_urls = [
   "https://shopifac-production.up.railway.app/api/auth/callback"
