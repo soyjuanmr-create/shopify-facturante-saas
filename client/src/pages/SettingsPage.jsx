@@ -38,6 +38,40 @@ export default function SettingsPage() {
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }, [fetch]);
 
+  function validate() {
+    var e = {};
+    if (!empresa.trim()) e.empresa = 'Obligatorio';
+    if (!usuario.trim()) e.usuario = 'Obligatorio';
+    else if (usuario.indexOf('@') === -1) e.usuario = 'Email invalido';
+    if (!hash.trim() && hash !== String.fromCharCode(8226).repeat(6)) e.hash = 'Obligatorio';
+    setFieldErrors(e); return Object.keys(e).length === 0;
+  }
+
+  const handleSave = useCallback(async () => {
+    if (!validate()) return;
+    setSaving(true); setError(null);
+    try {
+      var body = { empresa: empresa.trim(), usuario: usuario.trim(), puntoVenta: puntoVenta.trim(), autoInvoice: autoInvoice };
+      if (hash !== String.fromCharCode(8226).repeat(6)) body.hash = hash.trim();
+      var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
+      if (r.success) {
+        if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
+        await load(); // Recargar desde DB para sincronizar estado con lo guardado
+      } else setError(r.error || 'Error');
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  }, [fetch, load, empresa, usuario, hash, puntoVenta, autoInvoice]);
+
+  const handleDisconnect = useCallback(async () => {
+    setSaving(true);
+    try {
+      await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
+      setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
+      orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
+      if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar');
+      if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  }, [fetch]);
+
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
@@ -78,40 +112,6 @@ export default function SettingsPage() {
     document.addEventListener('shopifac:doDiscard', doDiscard);
     return function() { document.removeEventListener('shopifac:doSave', doSave); document.removeEventListener('shopifac:doDiscard', doDiscard); };
   }, [handleSave]);
-
-  function validate() {
-    var e = {};
-    if (!empresa.trim()) e.empresa = 'Obligatorio';
-    if (!usuario.trim()) e.usuario = 'Obligatorio';
-    else if (usuario.indexOf('@') === -1) e.usuario = 'Email invalido';
-    if (!hash.trim() && hash !== String.fromCharCode(8226).repeat(6)) e.hash = 'Obligatorio';
-    setFieldErrors(e); return Object.keys(e).length === 0;
-  }
-
-  const handleSave = useCallback(async () => {
-    if (!validate()) return;
-    setSaving(true); setError(null);
-    try {
-      var body = { empresa: empresa.trim(), usuario: usuario.trim(), puntoVenta: puntoVenta.trim(), autoInvoice: autoInvoice };
-      if (hash !== String.fromCharCode(8226).repeat(6)) body.hash = hash.trim();
-      var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
-      if (r.success) {
-        if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
-        await load(); // Recargar desde DB para sincronizar estado con lo guardado
-      } else setError(r.error || 'Error');
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
-  }, [fetch, load, empresa, usuario, hash, puntoVenta, autoInvoice]);
-
-  const handleDisconnect = useCallback(async () => {
-    setSaving(true);
-    try {
-      await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
-      setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
-      orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
-      if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar');
-      if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
-  }, [fetch]);
 
   if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
