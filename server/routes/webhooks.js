@@ -27,11 +27,34 @@ router.post('/shopify/order-paid', async (req, res) => {
     // Normalize REST line items: compute discounted_unit_price from discount_allocations
     // (REST payload has original price + discount_allocations, mapper uses discounted_unit_price)
     orderData.line_items = (orderData.line_items || []).map(function (item) {
-      var totalDiscount = (item.discount_allocations || []).reduce(function (sum, d) { return sum + parseFloat(d.amount || 0); }, 0);
       var qty = parseInt(item.quantity, 10) || 1;
-      item.discounted_unit_price = (parseFloat(item.price) - totalDiscount / qty).toString();
+      var pricePerUnit = parseFloat(item.price) || 0;
+
+      // Calcular descuento total del line item
+      var totalDiscount = (item.discount_allocations || []).reduce(function (sum, d) {
+        return sum + parseFloat(d.amount || 0);
+      }, 0);
+
+      // Descuento unitario = descuento total / cantidad
+      var discountPerUnit = qty > 0 ? (totalDiscount / qty) : 0;
+
+      // Precio unitario con descuento
+      var discountedUnitPrice = Math.max(0, pricePerUnit - discountPerUnit); // min 0
+
+      // Loguear para debugging
+      logger.debug('Item normalization: sku=' + (item.sku || 'N/A') +
+        ' qty=' + qty +
+        ' price=' + pricePerUnit.toFixed(2) +
+        ' totalDiscount=' + totalDiscount.toFixed(2) +
+        ' discountPerUnit=' + discountPerUnit.toFixed(2) +
+        ' final=' + discountedUnitPrice.toFixed(2));
+
+      item.discounted_unit_price = discountedUnitPrice.toFixed(3); // 3 decimales como Facturante espera
+
       return item;
     });
+
+    logger.info('Normalized ' + orderData.line_items.length + ' line items for order ' + orderData.name);
     var facturaData = FacturanteMapper.mapShopifyToFacturante(orderData);
     var status = 'pending', facturanteId = null, errorMsg = null, caeInline = null, numeroInline = null;
     if (shop.autoInvoice && shop.hash && shop.empresa) {
