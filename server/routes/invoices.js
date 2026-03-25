@@ -95,46 +95,43 @@ router.post('/generate', async (req, res) => {
       });
     }
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
-    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
-    let orderData;
-    orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
-    const gqlOrder = orderData.data ? orderData.data.order : null;
-    if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
-    const ba = gqlOrder.billingAddress || {};
-    const orderForMapper = {
-      id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
-      total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
-      billing_address: { first_name: ba.firstName || '', last_name: ba.lastName || '', address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
-      note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
-      line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
-      shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
-    };
-    // Fallback: si GraphQL no devolvió nombre (campo protegido aún no aprobado), usar datos del webhook guardados
-    if (!orderForMapper.billing_address.first_name && !orderForMapper.billing_address.last_name) {
-      const existingInv = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
-      if (existingInv && existingInv.invoiceData) {
-        const savedData = typeof existingInv.invoiceData === 'string' ? JSON.parse(existingInv.invoiceData) : existingInv.invoiceData;
-        if (savedData.cliente && savedData.cliente.nombre && savedData.cliente.nombre !== 'Consumidor Final') {
-          logger.info('Generate: usando nombre del webhook: ' + savedData.cliente.nombre);
-          var parts = savedData.cliente.nombre.split(' ');
-          orderForMapper.billing_address.first_name = parts[0] || '';
-          orderForMapper.billing_address.last_name = parts.slice(1).join(' ') || '';
-        }
-        if (!orderForMapper.email && savedData.cliente && savedData.cliente.email) {
-          orderForMapper.email = savedData.cliente.email;
-        }
-      }
+
+    let facturaData;
+    let orderName;
+
+    // Ruta 1: Si el webhook ya guardó invoiceData completa, usarla directamente
+    // El REST webhook recibe TODOS los datos del cliente sin necesitar campos protegidos
+    if (existing && existing.invoiceData) {
+      facturaData = typeof existing.invoiceData === 'string' ? JSON.parse(existing.invoiceData) : existing.invoiceData;
+      orderName = existing.shopifyOrderNumber || orderId;
+      logger.info('Generate: usando invoiceData del webhook para orden ' + orderId);
+    } else {
+      // Ruta 2: No hay datos del webhook — consultar GraphQL
+      // billingAddress omitido: todos sus sub-campos son protegidos en apps públicas
+      const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
+      const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+      const gqlOrder = orderData.data ? orderData.data.order : null;
+      if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
+      orderName = gqlOrder.name;
+      const orderForMapper = {
+        id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
+        total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
+        billing_address: {},
+        note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
+        line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
+        shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
+      };
+      logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
+      facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
     }
 
-    logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
-    const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
-    logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function (i) { return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
+    logger.info('FacturaData: cliente=' + facturaData.cliente.nombre + ' items=' + facturaData.items.length);
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
     const webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
     let resultado2;
     try { resultado2 = await facturante.crearComprobante(facturaData, webhookUrl); }
     catch (fe) {
-      await prisma.invoice.upsert({ where: { shopifyOrderId: orderId.toString() }, update: { status: 'failed', errorMessage: fe.message }, create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'failed', errorMessage: fe.message, invoiceData: facturaData } });
+      await prisma.invoice.upsert({ where: { shopifyOrderId: orderId.toString() }, update: { status: 'failed', errorMessage: fe.message }, create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: orderName, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'failed', errorMessage: fe.message, invoiceData: facturaData } });
       logger.error('Generate invoice error: ' + fe.message);
       return res.status(500).json({ error: fe.message });
     }
@@ -148,8 +145,8 @@ router.post('/generate', async (req, res) => {
     }
     await prisma.invoice.upsert({
       where: { shopifyOrderId: orderId.toString() },
-      update: { status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null },
-      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
+      update: { status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
+      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: orderName, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
     });
     await setInvoiceMetafields(session, orderId, invoiceStatus === 'completed'
       ? { status: 'completed', cae: invoiceCae, invoiceNumber: invoiceNumero }
