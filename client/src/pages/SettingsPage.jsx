@@ -141,7 +141,7 @@ export default function SettingsPage() {
               <Checkbox label="Activar facturacion automatica" checked={autoInvoice} onChange={setAutoInvoice} helpText="Si desactivada, facturas manualmente desde Ordenes." />
             </Card>
           </Layout.AnnotatedSection>
-          <Layout.AnnotatedSection title="Captura de DNI / CUIT" description="Como se obtiene el DNI o CUIT del cliente para determinar el tipo de factura (A o B).">
+          <Layout.AnnotatedSection title="DNI / CUIT en el checkout" description="Como configurar el campo de documento en el checkout para determinar el tipo de factura (A o B).">
             <Card>
               {isPlus ? (
                 <BlockStack gap="200">
@@ -150,10 +150,10 @@ export default function SettingsPage() {
                 </BlockStack>
               ) : (
                 <BlockStack gap="400">
-                  <Text>Tu tienda no es Shopify Plus. Para capturar el DNI / CUIT del cliente, tenes que traducir el campo <Text as="span" fontWeight="bold">Empresa</Text> del checkout a <Text as="span" fontWeight="bold">DNI / CUIT</Text> desde la configuracion de idiomas de tu tienda.</Text>
-                  <Text tone="subdued">El cliente ingresara su DNI o CUIT en ese campo al completar su direccion de envio o facturacion.</Text>
+                  <Text>Para que el cliente ingrese su DNI o CUIT, edita el contenido predeterminado del tema y renombra el campo <Text as="span" fontWeight="bold">Empresa</Text> a <Text as="span" fontWeight="bold">DNI / CUIT</Text>.</Text>
+                  <Text tone="subdued">Anda a Tienda online &gt; Temas &gt; ... &gt; Editar contenido predeterminado del tema, busca "Empresa" y reemplazalo por "DNI / CUIT".</Text>
                   <Button onClick={() => window.open(themeLanguageUrl, '_top')} disabled={!themeLanguageUrl}>
-                    Ir a configuracion de idiomas
+                    Editar contenido del tema
                   </Button>
                 </BlockStack>
               )}

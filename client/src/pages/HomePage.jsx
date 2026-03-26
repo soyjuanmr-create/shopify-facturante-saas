@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Layout, Card, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText, CalloutCard, Icon } from '@shopify/polaris';
+import { Page, Layout, Card, Text, Banner, BlockStack, InlineStack, InlineGrid, Button, Badge, SkeletonBodyText, CalloutCard } from '@shopify/polaris';
 import { CheckCircleIcon, OrderIcon, ReceiptIcon, ClockIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../hooks/useAuthFetch';
@@ -44,18 +44,18 @@ export default function HomePage() {
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {isConfigured && settings.isPlus && !dniBannerDismissed && (
           <Banner
-            title="Activar campo DNI/CUIT en el checkout"
+            title="Configurar campo DNI/CUIT"
             tone="info"
             action={{
-              content: 'Ir al editor de checkout',
-              onAction: () => window.open(checkoutEditorUrl, '_blank'),
+              content: 'Ir a Configuracion',
+              onAction: () => navigate('/settings'),
             }}
             onDismiss={() => {
               localStorage.setItem('shopifac_dni_banner_dismissed', '1');
               setDniBannerDismissed(true);
             }}
           >
-            <p>Agrega el bloque "Campo DNI/CUIT - Shopifac" en el editor de checkout para que tus clientes puedan ingresar su documento al comprar. Este dato se usa para emitir la factura electronica.</p>
+            <p>Para que tus clientes ingresen su DNI o CUIT al comprar, edita el contenido predeterminado del tema y renombra el campo "Empresa" a "DNI / CUIT". Mas detalles en Configuracion.</p>
           </Banner>
         )}
 
@@ -78,12 +78,12 @@ export default function HomePage() {
           </Banner>
         )}
         {isConfigured && stats && (
-          <InlineStack gap="400" wrap>
+          <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Total</Text><Text variant="headingXl" fontWeight="bold">{stats.total}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Facturadas</Text><Text variant="headingXl" fontWeight="bold">{stats.invoiced}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Pendientes</Text><Text variant="headingXl" fontWeight="bold">{stats.pending}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Con error</Text><Text variant="headingXl" fontWeight="bold">{stats.errors}</Text></BlockStack></Card>
-          </InlineStack>
+          </InlineGrid>
         )}
         {isConfigured && (
           <Card>
