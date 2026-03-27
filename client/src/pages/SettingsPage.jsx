@@ -90,7 +90,7 @@ export default function SettingsPage() {
     }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
-  if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card roundedAbove="sm"><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card roundedAbove="sm" padding="400"><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
@@ -111,7 +111,7 @@ export default function SettingsPage() {
                 <Text as="p" tone="subdued">Conecta tu cuenta de Facturante.com para emitir facturas electronicas.</Text>
               </BlockStack>
             </Box>
-            <Card roundedAbove="sm">
+            <Card roundedAbove="sm" padding="400">
               <BlockStack gap="400">
                 {connected && <InlineStack align="space-between"><Badge tone="success">Conectado</Badge><Button variant="plain" tone="critical" onClick={handleDisconnect} loading={saving}>Desconectar</Button></InlineStack>}
                 <FormLayout>
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                 <Text as="p" tone="subdued">Emitir factura automaticamente al recibir un pago.</Text>
               </BlockStack>
             </Box>
-            <Card roundedAbove="sm">
+            <Card roundedAbove="sm" padding="400">
               <BlockStack gap="400">
                 <Checkbox label="Activar facturacion automatica" checked={autoInvoice} onChange={setAutoInvoice} helpText="Si desactivada, facturas manualmente desde Ordenes." />
               </BlockStack>
@@ -145,7 +145,7 @@ export default function SettingsPage() {
                 <Text as="p" tone="subdued">Como configurar el campo de documento en el checkout para determinar el tipo de factura (A o B).</Text>
               </BlockStack>
             </Box>
-            <Card roundedAbove="sm">
+            <Card roundedAbove="sm" padding="400">
               <BlockStack gap="400">
                 {isPlus ? (
                   <BlockStack gap="200">
