@@ -36,10 +36,10 @@ export default function HomePage() {
   useEffect(() => { load(); }, [load]);
   var isConfigured = settings && settings.hasCredentials;
 
-  if (loading) return (<Page title="Shopifac"><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Shopifac" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
 
   return (
-    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina">
+    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina" narrowWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {isConfigured && settings.isPlus && !dniBannerDismissed && (

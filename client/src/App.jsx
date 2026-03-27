@@ -42,7 +42,7 @@ function AppNav() {
 
 export default function App() {
   return (
-    <AppProvider i18n={es}>
+    <AppProvider i18n={es} features={{ polarisSummerEditions2023: true }}>
       <BrowserRouter>
         <ErrorBoundary>
           <AppNav />

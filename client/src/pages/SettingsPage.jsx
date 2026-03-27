@@ -114,12 +114,12 @@ export default function SettingsPage() {
     return function() { document.removeEventListener('shopifac:doSave', doSave); document.removeEventListener('shopifac:doDiscard', doDiscard); };
   }, [handleSave]);
 
-  if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Configuracion" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
   return (
-    <Page title="Configuracion">
+    <Page title="Configuracion" narrowWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         <Layout>
