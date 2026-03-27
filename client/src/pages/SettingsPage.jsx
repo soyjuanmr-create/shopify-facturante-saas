@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [isPlus, setIsPlus] = useState(false);
   const [themeLanguageUrl, setThemeLanguageUrl] = useState('');
   const orig = useRef({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false });
+  const saveBarRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,7 +58,7 @@ export default function SettingsPage() {
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
         if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
-        try { var b = document.getElementById('settings-bar'); if (b) b.hide(); } catch (e) {}
+        if (saveBarRef.current) saveBarRef.current.hide().catch(function() {});
         await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); if (typeof shopify !== 'undefined') shopify.loading.stop(); }
@@ -69,20 +70,23 @@ export default function SettingsPage() {
       await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
       setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
       orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
-      try { var b2 = document.getElementById('settings-bar'); if (b2) b2.hide(); } catch (e) {}
+      if (saveBarRef.current) saveBarRef.current.hide().catch(function() {});
       if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Dirty check → show/hide via metodos nativos del elemento
+  // Dirty check → show/hide via ref al elemento nativo
   useEffect(() => {
     var d = empresa !== orig.current.empresa || usuario !== orig.current.usuario || hash !== orig.current.hash || puntoVenta !== orig.current.puntoVenta || autoInvoice !== orig.current.autoInvoice;
-    var bar = document.getElementById('settings-bar');
+    var bar = saveBarRef.current;
     if (bar) {
-      var p = d ? bar.show() : bar.hide();
-      if (p && p.catch) p.catch(function() {});
+      var timer = setTimeout(function() {
+        var p = d ? bar.show() : bar.hide();
+        if (p && p.catch) p.catch(function() {});
+      }, 50);
+      return function() { clearTimeout(timer); };
     }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
@@ -92,7 +96,7 @@ export default function SettingsPage() {
 
   return (
     <Page title="Configuracion" narrowWidth>
-      <ui-save-bar id="settings-bar">
+      <ui-save-bar id="settings-bar" ref={saveBarRef}>
         <button variant="primary" onClick={handleSave}>Guardar</button>
         <button onClick={() => { setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({}); }}>Descartar</button>
       </ui-save-bar>
