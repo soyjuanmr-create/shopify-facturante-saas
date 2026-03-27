@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Layout, Card, Text, Banner, BlockStack, InlineStack, InlineGrid, Button, Badge, SkeletonBodyText, CalloutCard } from '@shopify/polaris';
 import { CheckCircleIcon, OrderIcon, ReceiptIcon, ClockIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
 import { useNavigate } from 'react-router-dom';
@@ -36,10 +36,10 @@ export default function HomePage() {
   useEffect(() => { load(); }, [load]);
   var isConfigured = settings && settings.hasCredentials;
 
-  if (loading) return (<Page title="Shopifac" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Shopifac" fullWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
 
   return (
-    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina" narrowWidth>
+    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina" fullWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {isConfigured && settings.isPlus && !dniBannerDismissed && (

@@ -90,12 +90,12 @@ export default function SettingsPage() {
     }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
-  if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card roundedAbove="sm" padding="400"><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Configuracion" fullWidth><Layout><Layout.Section><Card roundedAbove="sm" padding="400"><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
   return (
-    <Page title="Configuracion">
+    <Page title="Configuracion" fullWidth>
       <ui-save-bar id="settings-bar" ref={saveBarRef}>
         <button variant="primary" onClick={handleSave}>Guardar</button>
         <button onClick={() => { setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({}); }}>Descartar</button>
@@ -104,7 +104,7 @@ export default function SettingsPage() {
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         <BlockStack gap={{ xs: '800', sm: '400' }}>
           
-          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+          <InlineGrid columns={{ xs: 1, md: '2fr 5fr' }} gap="400">
             <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">Credenciales de Facturante</Text>
@@ -124,7 +124,7 @@ export default function SettingsPage() {
             </Card>
           </InlineGrid>
           
-          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+          <InlineGrid columns={{ xs: 1, md: '2fr 5fr' }} gap="400">
             <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">Facturacion automatica</Text>
@@ -138,7 +138,7 @@ export default function SettingsPage() {
             </Card>
           </InlineGrid>
 
-          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+          <InlineGrid columns={{ xs: 1, md: '2fr 5fr' }} gap="400">
             <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">DNI / CUIT en el checkout</Text>

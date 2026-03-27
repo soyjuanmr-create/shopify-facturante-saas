@@ -87,10 +87,10 @@ export default function OrdersPage() {
     return num.includes(q);
   });
 
-  if (loading) return (<Page title="Ordenes" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={8} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Ordenes" fullWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={8} /></Card></Layout.Section></Layout></Page>);
 
   return (
-    <Page title="Ordenes" narrowWidth>
+    <Page title="Ordenes" fullWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {success && <Banner title="Exito" tone="success" onDismiss={() => setSuccess(null)}><p>{success}</p></Banner>}

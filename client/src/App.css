@@ -1,0 +1,20 @@
+/* App.css */
+.Polaris-Page {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .Polaris-Page {
+    padding: 0 !important;
+  }
+  
+  .Polaris-Card {
+    margin: 0 !important;
+    border-radius: 0 !important; /* opcional, se ve más nativo en móvil */
+  }
+  
+  .Polaris-Layout__Section {
+    padding: 0 !important;
+  }
+}
