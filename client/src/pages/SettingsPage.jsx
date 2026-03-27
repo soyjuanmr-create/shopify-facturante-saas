@@ -80,7 +80,10 @@ export default function SettingsPage() {
   useEffect(() => {
     var d = empresa !== orig.current.empresa || usuario !== orig.current.usuario || hash !== orig.current.hash || puntoVenta !== orig.current.puntoVenta || autoInvoice !== orig.current.autoInvoice;
     var bar = document.getElementById('settings-bar');
-    if (bar) { try { d ? bar.show() : bar.hide(); } catch (e) {} }
+    if (bar) {
+      var p = d ? bar.show() : bar.hide();
+      if (p && p.catch) p.catch(function() {});
+    }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
   if (loading) return (<Page title="Configuracion" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
