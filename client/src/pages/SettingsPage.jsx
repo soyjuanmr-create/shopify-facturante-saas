@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const handleSave = useCallback(async () => {
     if (!validate()) return;
     setSaving(true); setError(null);
+    if (typeof shopify !== 'undefined') shopify.loading.start();
     try {
       var body = { empresa: empresa.trim(), usuario: usuario.trim(), puntoVenta: puntoVenta.trim(), autoInvoice: autoInvoice };
       if (hash !== String.fromCharCode(8226).repeat(6)) body.hash = hash.trim();
@@ -59,7 +60,7 @@ export default function SettingsPage() {
         try { var b = document.getElementById('settings-bar'); if (b) b.hide(); } catch (e) {}
         await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); if (typeof shopify !== 'undefined') shopify.loading.stop(); }
   }, [fetch, load, empresa, usuario, hash, puntoVenta, autoInvoice]);
 
   const handleDisconnect = useCallback(async () => {
