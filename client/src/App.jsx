@@ -35,15 +35,7 @@ function AppNav() {
     }
   }, [navigate]);
 
-  // Update aria-current on route change only
-  useEffect(() => {
-    const nav = document.querySelector('s-app-nav');
-    if (!nav) return;
-    nav.querySelectorAll('a[data-dest]').forEach(a => {
-      if (a.dataset.dest === location.pathname) a.setAttribute('aria-current', 'page');
-      else a.removeAttribute('aria-current');
-    });
-  }, [location.pathname]);
+  // App Bridge maneja el estado activo internamente via href — no se toca aria-current
 
   return null;
 }

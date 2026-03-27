@@ -77,7 +77,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     var d = empresa !== orig.current.empresa || usuario !== orig.current.usuario || hash !== orig.current.hash || puntoVenta !== orig.current.puntoVenta || autoInvoice !== orig.current.autoInvoice;
-    if (typeof shopify !== 'undefined' && shopify.saveBar) { d ? shopify.saveBar.show('settings-bar') : shopify.saveBar.hide('settings-bar'); }
+    if (typeof shopify !== 'undefined' && shopify.saveBar) { try { d ? shopify.saveBar.show('settings-bar') : shopify.saveBar.hide('settings-bar'); } catch (e) {} }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function SettingsPage() {
     return function() {
       document.removeEventListener('shopifac:save', onSave);
       document.removeEventListener('shopifac:discard', onDiscard);
-      if (shopify.saveBar) shopify.saveBar.hide('settings-bar');
+      try { if (shopify.saveBar) shopify.saveBar.hide('settings-bar'); } catch (e) {}
     };
   }, []);
 
