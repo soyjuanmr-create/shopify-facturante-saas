@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Page, Layout, Card, FormLayout, TextField, Checkbox, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText } from '@shopify/polaris';
+import { Page, Layout, Card, FormLayout, TextField, Checkbox, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText, InlineGrid, Box } from '@shopify/polaris';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
 export default function SettingsPage() {
@@ -90,21 +90,28 @@ export default function SettingsPage() {
     }
   }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
-  if (loading) return (<Page title="Configuracion" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Configuracion"><Layout><Layout.Section><Card roundedAbove="sm"><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
   var connected = orig.current.empresa && orig.current.hash && orig.current.hash !== String.fromCharCode(8226).repeat(6) && orig.current.hash !== '';
 
   return (
-    <Page title="Configuracion" narrowWidth>
+    <Page title="Configuracion">
       <ui-save-bar id="settings-bar" ref={saveBarRef}>
         <button variant="primary" onClick={handleSave}>Guardar</button>
         <button onClick={() => { setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({}); }}>Descartar</button>
       </ui-save-bar>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
-        <Layout>
-          <Layout.AnnotatedSection title="Credenciales de Facturante" description="Conecta tu cuenta de Facturante.com para emitir facturas electronicas.">
-            <Card>
+        <BlockStack gap={{ xs: '800', sm: '400' }}>
+          
+          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+            <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingMd">Credenciales de Facturante</Text>
+                <Text as="p" tone="subdued">Conecta tu cuenta de Facturante.com para emitir facturas electronicas.</Text>
+              </BlockStack>
+            </Box>
+            <Card roundedAbove="sm">
               <BlockStack gap="400">
                 {connected && <InlineStack align="space-between"><Badge tone="success">Conectado</Badge><Button variant="plain" tone="critical" onClick={handleDisconnect} loading={saving}>Desconectar</Button></InlineStack>}
                 <FormLayout>
@@ -115,31 +122,50 @@ export default function SettingsPage() {
                 </FormLayout>
               </BlockStack>
             </Card>
-          </Layout.AnnotatedSection>
-          <Layout.AnnotatedSection title="Facturacion automatica" description="Emitir factura automaticamente al recibir un pago.">
-            <Card>
-              <Checkbox label="Activar facturacion automatica" checked={autoInvoice} onChange={setAutoInvoice} helpText="Si desactivada, facturas manualmente desde Ordenes." />
+          </InlineGrid>
+          
+          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+            <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingMd">Facturacion automatica</Text>
+                <Text as="p" tone="subdued">Emitir factura automaticamente al recibir un pago.</Text>
+              </BlockStack>
+            </Box>
+            <Card roundedAbove="sm">
+              <BlockStack gap="400">
+                <Checkbox label="Activar facturacion automatica" checked={autoInvoice} onChange={setAutoInvoice} helpText="Si desactivada, facturas manualmente desde Ordenes." />
+              </BlockStack>
             </Card>
-          </Layout.AnnotatedSection>
-          <Layout.AnnotatedSection title="DNI / CUIT en el checkout" description="Como configurar el campo de documento en el checkout para determinar el tipo de factura (A o B).">
-            <Card>
-              {isPlus ? (
-                <BlockStack gap="200">
-                  <Text>Tu tienda es Shopify Plus. El campo DNI / CUIT aparece automaticamente en el checkout via la extension de Shopifac.</Text>
-                  <Banner tone="success"><p>No necesitas hacer nada adicional.</p></Banner>
-                </BlockStack>
-              ) : (
-                <BlockStack gap="400">
-                  <Text>Para que el cliente ingrese su DNI o CUIT, edita el contenido predeterminado del tema y renombra el campo <Text as="span" fontWeight="bold">Empresa</Text> a <Text as="span" fontWeight="bold">DNI / CUIT</Text>.</Text>
-                  <Text tone="subdued">Anda a Tienda online &gt; Temas &gt; ... &gt; Editar contenido predeterminado del tema, busca "Empresa" y reemplazalo por "DNI / CUIT".</Text>
-                  <Button onClick={() => window.open(themeLanguageUrl, '_top')} disabled={!themeLanguageUrl}>
-                    Editar contenido del tema
-                  </Button>
-                </BlockStack>
-              )}
+          </InlineGrid>
+
+          <InlineGrid columns={{ xs: '1fr', md: '2fr 5fr' }} gap="400">
+            <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingMd">DNI / CUIT en el checkout</Text>
+                <Text as="p" tone="subdued">Como configurar el campo de documento en el checkout para determinar el tipo de factura (A o B).</Text>
+              </BlockStack>
+            </Box>
+            <Card roundedAbove="sm">
+              <BlockStack gap="400">
+                {isPlus ? (
+                  <BlockStack gap="200">
+                    <Text>Tu tienda es Shopify Plus. El campo DNI / CUIT aparece automaticamente en el checkout via la extension de Shopifac.</Text>
+                    <Banner tone="success"><p>No necesitas hacer nada adicional.</p></Banner>
+                  </BlockStack>
+                ) : (
+                  <BlockStack gap="400">
+                    <Text>Para que el cliente ingrese su DNI o CUIT, edita el contenido predeterminado del tema y renombra el campo <Text as="span" fontWeight="bold">Empresa</Text> a <Text as="span" fontWeight="bold">DNI / CUIT</Text>.</Text>
+                    <Text tone="subdued">Anda a Tienda online &gt; Temas &gt; ... &gt; Editar contenido predeterminado del tema, busca "Empresa" y reemplazalo por "DNI / CUIT".</Text>
+                    <Button onClick={() => window.open(themeLanguageUrl, '_top')} disabled={!themeLanguageUrl}>
+                      Editar contenido del tema
+                    </Button>
+                  </BlockStack>
+                )}
+              </BlockStack>
             </Card>
-          </Layout.AnnotatedSection>
-        </Layout>
+          </InlineGrid>
+
+        </BlockStack>
       </BlockStack>
     </Page>
   );
