@@ -12,15 +12,6 @@ export default function HomePage() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   const [dismissed, setDismissed] = useState(false);
-  const [dniBannerDismissed, setDniBannerDismissed] = useState(
-    () => localStorage.getItem('shopifac_dni_banner_dismissed') === '1'
-  );
-
-  const shop = new URLSearchParams(window.location.search).get('shop') || '';
-  const storeSlug = shop.replace('.myshopify.com', '');
-  const checkoutEditorUrl = storeSlug
-    ? `https://admin.shopify.com/store/${storeSlug}/settings/checkout`
-    : 'https://admin.shopify.com';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,23 +33,6 @@ export default function HomePage() {
     <Page title="Shopifac" subtitle="Facturacion electronica para Argentina" fullWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
-        {isConfigured && settings.isPlus && !dniBannerDismissed && (
-          <Banner
-            title="Configurar campo DNI/CUIT"
-            tone="info"
-            action={{
-              content: 'Ir a Configuracion',
-              onAction: () => navigate('/settings'),
-            }}
-            onDismiss={() => {
-              localStorage.setItem('shopifac_dni_banner_dismissed', '1');
-              setDniBannerDismissed(true);
-            }}
-          >
-            <p>Para que tus clientes ingresen su DNI o CUIT al comprar, edita el contenido predeterminado del tema y renombra el campo "Empresa" a "DNI / CUIT". Mas detalles en Configuracion.</p>
-          </Banner>
-        )}
-
         {isConfigured ? (
           <Banner title="Facturante conectado" tone="success">
             <p>Las facturas se {settings.autoInvoice ? 'emiten automaticamente al recibir un pago' : 'pueden emitir manualmente desde Ordenes'}.</p>
