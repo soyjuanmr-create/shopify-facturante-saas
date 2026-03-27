@@ -56,7 +56,7 @@ export default function SettingsPage() {
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
         if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
-        try { if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar'); } catch (e) {}
+        try { var b = document.getElementById('settings-bar'); if (b) b.hide(); } catch (e) {}
         await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
@@ -68,39 +68,19 @@ export default function SettingsPage() {
       await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false }) });
       setEmpresa(''); setUsuario(''); setHash(''); setPuntoVenta('1'); setAutoInvoice(false);
       orig.current = { empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false };
-      try { if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar'); } catch (e) {}
+      try { var b2 = document.getElementById('settings-bar'); if (b2) b2.hide(); } catch (e) {}
       if (typeof shopify !== 'undefined') shopify.toast.show('Desconectado');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Dirty check → show/hide la barra de guardado declarativa
+  // Dirty check → show/hide via metodos nativos del elemento
   useEffect(() => {
     var d = empresa !== orig.current.empresa || usuario !== orig.current.usuario || hash !== orig.current.hash || puntoVenta !== orig.current.puntoVenta || autoInvoice !== orig.current.autoInvoice;
-    if (typeof shopify !== 'undefined' && shopify.saveBar) {
-      try { d ? shopify.saveBar.show('settings-bar') : shopify.saveBar.hide('settings-bar'); } catch (e) {}
-    }
-  }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
-
-  // Escuchar eventos nativos del ui-save-bar declarativo
-  useEffect(() => {
     var bar = document.getElementById('settings-bar');
-    if (!bar) return;
-    function onSave() { handleSave(); }
-    function onDiscard() {
-      setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || '');
-      setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1');
-      setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({});
-    }
-    bar.addEventListener('save', onSave);
-    bar.addEventListener('discard', onDiscard);
-    return function() {
-      bar.removeEventListener('save', onSave);
-      bar.removeEventListener('discard', onDiscard);
-      try { if (typeof shopify !== 'undefined' && shopify.saveBar) shopify.saveBar.hide('settings-bar'); } catch (e) {}
-    };
-  }, [handleSave]);
+    if (bar) { try { d ? bar.show() : bar.hide(); } catch (e) {} }
+  }, [empresa, usuario, hash, puntoVenta, autoInvoice]);
 
   if (loading) return (<Page title="Configuracion" narrowWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={6} /></Card></Layout.Section></Layout></Page>);
 
@@ -108,10 +88,9 @@ export default function SettingsPage() {
 
   return (
     <Page title="Configuracion" narrowWidth>
-      {/* ui-save-bar declarativo — App Bridge lo muestra/oculta via shopify.saveBar.show/hide */}
       <ui-save-bar id="settings-bar">
-        <button variant="primary">Guardar</button>
-        <button>Descartar</button>
+        <button variant="primary" onClick={handleSave}>Guardar</button>
+        <button onClick={() => { setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({}); }}>Descartar</button>
       </ui-save-bar>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
