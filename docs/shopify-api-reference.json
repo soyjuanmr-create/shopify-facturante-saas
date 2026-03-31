@@ -1,0 +1,190 @@
+{
+  "apiVersion": "2025-04",
+  "baseUrl": "https://{shop}.myshopify.com/admin/api/2025-04",
+  "authentication": {
+    "type": "OAuth2 (offline session)",
+    "headerFormat": "X-Shopify-Access-Token: {accessToken}",
+    "note": "Usar accessToken de Session table (más nuevo) o Shop table (fallback)"
+  },
+  "requiredScopes": [
+    "read_orders",
+    "write_orders",
+    "read_customers",
+    "read_products",
+    "read_themes"
+  ],
+  "endpoints": {
+    "orders_list_graphql": {
+      "method": "POST",
+      "path": "/graphql.json",
+      "type": "GraphQL",
+      "description": "Lista órdenes pagadas con paginación",
+      "query": "{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: \"financial_status:paid\", after: \"{cursor}\") { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }",
+      "responseFields": ["id", "name", "createdAt", "displayFinancialStatus", "totalPriceSet.presentmentMoney.amount", "customer.firstName", "customer.lastName", "customer.email"],
+      "important": "El ID es un gid://shopify/Order/{numeric_id}, extraer {numeric_id} con .split('/').pop()"
+    },
+    "order_detail_graphql": {
+      "method": "POST",
+      "path": "/graphql.json",
+      "type": "GraphQL",
+      "description": "Obtiene detalles completos de orden para facturación",
+      "variables": {
+        "id": "gid://shopify/Order/{orderId}"
+      },
+      "query": "query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }",
+      "responseFields": ["id", "name", "email", "taxesIncluded", "totalPriceSet", "billingAddress", "customAttributes", "shippingLine", "lineItems"],
+      "important": "taxesIncluded determina si hay que dividir precios por (1+iva%). lineItems.taxLines[0].rate es decimal (0.21 = 21%)"
+    },
+    "metafields_set": {
+      "method": "POST",
+      "path": "/graphql.json",
+      "type": "GraphQL",
+      "description": "Escribir metafields de facturación en orden",
+      "mutation": "mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { id namespace key value } userErrors { field message code } } }",
+      "variables": {
+        "metafields": [
+          {
+            "ownerId": "gid://shopify/Order/{orderId}",
+            "namespace": "shopifac",
+            "key": "invoice_status",
+            "type": "single_line_text_field",
+            "value": "completed|processing|failed"
+          },
+          {
+            "ownerId": "gid://shopify/Order/{orderId}",
+            "namespace": "shopifac",
+            "key": "invoice_cae",
+            "type": "single_line_text_field",
+            "value": "{cae}"
+          }
+        ]
+      },
+      "important": "type debe ser 'single_line_text_field'. userErrors indican problemas. No es crítico si falla."
+    },
+    "checkout_profiles": {
+      "method": "POST",
+      "path": "/graphql.json",
+      "type": "GraphQL",
+      "description": "Obtener ID del perfil de checkout publicado (para activar extensión DNI)",
+      "query": "{ checkoutProfiles(first: 1, query: \"is_published:true\") { edges { node { id } } } }",
+      "important": "Solo funciona en Shopify Plus. Falla silenciosamente en planes regulares (no bloqueante)."
+    },
+    "extension_activation": {
+      "method": "POST",
+      "path": "/graphql.json",
+      "type": "GraphQL",
+      "description": "Activar extensión checkout-dni",
+      "mutation": "mutation extensionActivationCreate($input: ExtensionActivationCreateInput!) { extensionActivationCreate(input: $input) { extensionActivation { id } userErrors { field message } } }",
+      "variables": {
+        "input": {
+          "checkoutProfileId": "gid://shopify/CheckoutProfile/{id}",
+          "handle": "shopifac-checkout-dni",
+          "settings": {
+            "enable_dni": true
+          }
+        }
+      },
+      "important": "Solo Plus. Handle debe coincidir exactamente con la extensión en shopify.app.toml"
+    },
+    "themes_list_rest": {
+      "method": "GET",
+      "path": "/themes.json?role=main",
+      "type": "REST",
+      "description": "Obtener ID del tema publicado",
+      "responseFields": ["themes[0].id"],
+      "important": "Retorna array de temas. El primero con role=main es el publicado."
+    }
+  },
+  "webhooks": {
+    "orders_paid": {
+      "endpoint": "POST /webhooks/shopify/order-paid",
+      "topic": "orders/paid",
+      "apiVersion": "2025-04",
+      "headerValidation": {
+        "hmacHeader": "x-shopify-hmac-sha256",
+        "shopHeader": "x-shopify-shop-domain",
+        "algorithm": "sha256(SHOPIFY_API_SECRET)",
+        "bodyFormat": "raw (Buffer, no JSON parsed yet)"
+      },
+      "payloadExample": {
+        "id": 123456,
+        "name": "#1001",
+        "email": "customer@example.com",
+        "line_items": [
+          {
+            "title": "Product Name",
+            "sku": "SKU-123",
+            "quantity": 2,
+            "price": "50.00",
+            "discount_allocations": [
+              { "amount": "5.00" }
+            ],
+            "tax_lines": [
+              { "rate": 0.21 }
+            ]
+          }
+        ],
+        "shipping_lines": [
+          {
+            "title": "Standard Shipping",
+            "price": "10.00",
+            "tax_lines": [
+              { "rate": 0.21 }
+            ]
+          }
+        ],
+        "billing_address": {
+          "first_name": "John",
+          "last_name": "Doe",
+          "company": "20123456789",
+          "address1": "123 Main St",
+          "city": "CABA",
+          "province": "Ciudad Autonoma de Buenos Aires",
+          "zip": "1428"
+        },
+        "taxes_included": false
+      },
+      "important": "Normalizar line_items: agregar discounted_unit_price = price - (discount_allocations.sum / quantity)"
+    },
+    "facturante_webhook": {
+      "endpoint": "POST /webhooks/facturante",
+      "description": "Recibir estado de comprobante desde Facturante",
+      "payloadFormats": [
+        {
+          "format": "JSON",
+          "header": "Content-Type: application/json",
+          "example": {
+            "IdComprobante": "12345",
+            "CAE": "61234567890123",
+            "NumeroComprobante": "1234",
+            "Estado": "autorizado",
+            "Mensaje": "OK"
+          }
+        },
+        {
+          "format": "XML (V2)",
+          "example": "<?xml version=\"1.0\"?><response><IdComprobante>12345</IdComprobante><CAE>61234567890123</CAE><Estado>autorizado</Estado></response>"
+        },
+        {
+          "format": "Form-urlencoded (V1 legacy)",
+          "example": "IdComprobante=12345&CAE=61234567890123&Estado=autorizado"
+        }
+      ],
+      "important": "Soporta múltiples formatos. Parsear en orden: JSON → XML → form-urlencoded. Campos pueden ser PascalCase o camelCase."
+    }
+  },
+  "commonErrors": {
+    "400_missing_token": "El token expiró. Buscar Session table primero, luego Shop table. Si ambas vacías → authRequired: true",
+    "404_order_not_found": "Orden no existe o no ha sido pagada. Verificar que financial_status=paid",
+    "500_graphql_errors": "Ver resp.data.errors[].message. Pueden ser validación de query o permisos insuficientes",
+    "soap_fault_facturante": "Respuesta SOAP con <Fault>. Extraer faultstring. Usualmente credenciales o datos inválidos.",
+    "504_facturante_timeout": "Facturante tardó. Reintentar con exponential backoff (2 intentos en 1s cada uno)"
+  },
+  "importantPatterns": {
+    "tokenManagement": "Buscar accessToken en este orden: 1) Session table (isOnline: false, más reciente) 2) Shop table (fallback). Loguear cuál se usa para debugging.",
+    "priceCalculation": "Si taxesIncluded=true, dividir precio por (1 + rate). Ej: $100 con IVA 21% → precio neto = 100 / 1.21 = $82.64",
+    "idExtraction": "GraphQL retorna gid://shopify/Order/12345. Extraer 12345 con .split('/').pop() para REST y Facturante.",
+    "discountNormalization": "REST webhook retorna discount_allocations. Calcular: discounted_unit_price = price - (sum(discounts) / quantity)",
+    "nonBlockingOperations": "Metafields, extensión checkout, webhook a Facturante: fallos no deben romper el flujo principal. Loguear y continuar."
+  }
+}

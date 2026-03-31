@@ -18,6 +18,9 @@ export default function SettingsPage() {
   const [themeLanguageUrl, setThemeLanguageUrl] = useState('');
   const orig = useRef({ empresa: '', usuario: '', hash: '', puntoVenta: '1', autoInvoice: false });
   const saveBarRef = useRef(null);
+  // Refs estables para los handlers (evita re-registrar listeners en cada render)
+  const handleSaveRef = useRef(null);
+  const handleDiscardRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +78,30 @@ export default function SettingsPage() {
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }, [fetch]);
 
+  // Mantener refs actualizados con los handlers más recientes
+  useEffect(() => { handleSaveRef.current = handleSave; }, [handleSave]);
+  const handleDiscard = useCallback(() => {
+    setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || '');
+    setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({});
+  }, []);
+  useEffect(() => { handleDiscardRef.current = handleDiscard; }, [handleDiscard]);
+
+  // Registrar listeners nativos en los botones del ui-save-bar (Shadow DOM no propaga eventos React)
+  useEffect(() => {
+    var bar = saveBarRef.current;
+    if (!bar) return;
+    var saveBtn = bar.querySelector('button[variant="primary"]');
+    var discardBtn = bar.querySelector('button:not([variant])');
+    function onSave() { if (handleSaveRef.current) handleSaveRef.current(); }
+    function onDiscard() { if (handleDiscardRef.current) handleDiscardRef.current(); }
+    if (saveBtn) saveBtn.addEventListener('click', onSave);
+    if (discardBtn) discardBtn.addEventListener('click', onDiscard);
+    return function() {
+      if (saveBtn) saveBtn.removeEventListener('click', onSave);
+      if (discardBtn) discardBtn.removeEventListener('click', onDiscard);
+    };
+  }, [loading]); // Re-registrar cuando el componente termina de cargar
+
   useEffect(() => { load(); }, [load]);
 
   // Dirty check → show/hide via ref al elemento nativo
@@ -97,8 +124,8 @@ export default function SettingsPage() {
   return (
     <Page title="Configuracion" fullWidth>
       <ui-save-bar id="settings-bar" ref={saveBarRef}>
-        <button variant="primary" onClick={handleSave}>Guardar</button>
-        <button onClick={() => { setEmpresa(orig.current.empresa || ''); setUsuario(orig.current.usuario || ''); setHash(orig.current.hash || ''); setPuntoVenta(orig.current.puntoVenta || '1'); setAutoInvoice(orig.current.autoInvoice || false); setFieldErrors({}); }}>Descartar</button>
+        <button variant="primary">Guardar</button>
+        <button>Descartar</button>
       </ui-save-bar>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
