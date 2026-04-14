@@ -120,10 +120,17 @@ router.post('/shopify/gdpr', async (req, res) => {
 
   var topic = req.headers['x-shopify-topic'];
   var shopDomain = req.headers['x-shopify-shop-domain'];
-  var payload = JSON.parse(req.body.toString());
 
   // Respond immediately — Shopify requires < 5s response
   res.status(200).json({ received: true });
+
+  var payload;
+  try {
+    payload = JSON.parse(req.body.toString());
+  } catch (e) {
+    logger.warn('GDPR webhook: invalid JSON body (' + topic + '): ' + e.message);
+    return;
+  }
 
   try {
     if (topic === 'customers/redact') {
