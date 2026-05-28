@@ -1,19 +1,41 @@
 ﻿const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const prisma = require('../models/prisma');
 const shopify = require('../services/shopify');
+const { getValidAccessToken } = require('../utils/tokenUtils');
+const logger = require('../utils/logger');
 
 router.get('/', async (req, res) => {
   try {
+    // Auth: la extension de impresion del admin agrega un session/ID token de Shopify
+    // (via shopify.idToken()) en el query. Se verifica con el secret de la app y se acota
+    // la impresion a la tienda dueña del token: un merchant solo puede imprimir lo suyo.
+    var token = req.query.token;
+    if (!token) return res.status(401).send('<h1>No autorizado</h1>');
+    var tokenShop;
+    try {
+      var payload = jwt.verify(token, process.env.SHOPIFY_API_SECRET, { algorithms: ['HS256'], clockTolerance: 10 });
+      tokenShop = new URL(payload.dest).hostname;
+    } catch (e) {
+      logger.warn('print: token invalido/expirado: ' + e.message);
+      return res.status(401).send('<h1>No autorizado</h1>');
+    }
+
     var printType = req.query.printType;
     var orderId = req.query.orderId;
     if (!orderId || !printType) return res.status(400).send('<h1>Missing params</h1>');
     var shortId = orderId.indexOf('/') > -1 ? orderId.split('/').pop() : orderId;
-    var invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: shortId }, include: { shop: true } });
+
+    var shop = await prisma.shop.findUnique({ where: { shopDomain: tokenShop } });
+    if (!shop || shop.status !== 'active') return res.status(403).send('<h1>Tienda no activa</h1>');
+    var invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: shortId } });
+
     var order = null;
-    if (invoice && invoice.shop) {
+    var accessToken = await getValidAccessToken(tokenShop, shop);
+    if (accessToken) {
       try {
-        var session = { shop: invoice.shop.shopDomain, accessToken: invoice.shop.accessToken };
+        var session = { shop: tokenShop, accessToken: accessToken };
         var client = new shopify.clients.Graphql({ session: session });
         var r = await client.request('query($id:ID!){order(id:$id){name createdAt email totalPriceSet{shopMoney{amount currencyCode}} subtotalPriceSet{shopMoney{amount}} totalTaxSet{shopMoney{amount}} billingAddress{firstName lastName company address1 city province zip} shippingAddress{firstName lastName company address1 city province zip country} lineItems(first:50){edges{node{title sku quantity originalUnitPriceSet{shopMoney{amount}} discountedUnitPriceSet{shopMoney{amount}}}}}}}', { variables: { id: 'gid://shopify/Order/' + shortId } });
         order = r.data ? r.data.order : null;
