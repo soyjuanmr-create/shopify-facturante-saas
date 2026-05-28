@@ -44,7 +44,13 @@ router.get('/orders', async (req, res) => {
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } } } } }';
+    // Busqueda server-side: el termino se pasa al query de Shopify para encontrar ordenes
+    // mas alla de las primeras 50 (por nro de orden, email, etc.). Se sanitiza para no
+    // romper el string literal de GraphQL (se eliminan comillas, backslash, #, saltos).
+    const search = (req.query.search || '').replace(/[^\w@.\-\s]/g, ' ').trim();
+    var queryFilter = 'financial_status:paid';
+    if (search) queryFilter += ' AND ' + search;
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "' + queryFilter + '"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } } } } }';
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
@@ -160,6 +166,57 @@ router.post('/generate', async (req, res) => {
     if (error.authRequired) {
       return res.status(403).json({ error: 'Token de acceso expirado. Reabrí la app desde el admin de Shopify.', authRequired: true });
     }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Genera la Nota de Credito (anulacion total) de una factura ya autorizada.
+// Usa CrearAnulacionFull de Facturante, que asocia la NC al comprobante original por su Id.
+router.post('/credit-note', async (req, res) => {
+  try {
+    const orderId = req.body.orderId;
+    if (!orderId) return res.status(400).json({ error: 'orderId requerido' });
+    const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
+    if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
+
+    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    if (!invoice) return res.status(404).json({ error: 'No existe una factura registrada para esta orden.' });
+    if (invoice.status === 'cancelled') return res.json({ success: true, message: 'Esta factura ya tiene una nota de credito emitida.' });
+    if (invoice.status !== 'completed') return res.status(400).json({ error: 'Solo se puede anular una factura autorizada (con CAE). Estado actual: ' + invoice.status });
+    if (!invoice.facturanteInvoiceId) return res.status(400).json({ error: 'La factura no tiene ID de Facturante; no se puede anular automaticamente.' });
+
+    const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
+    let result;
+    try {
+      result = await facturante.anularComprobante(invoice.facturanteInvoiceId, 'Nota de credito orden ' + invoice.shopifyOrderNumber);
+    } catch (fe) {
+      logger.error('Credit-note error para orderId=' + orderId + ': ' + fe.message);
+      return res.status(500).json({ error: fe.message });
+    }
+
+    const prevData = invoice.invoiceData
+      ? (typeof invoice.invoiceData === 'string' ? JSON.parse(invoice.invoiceData) : invoice.invoiceData)
+      : {};
+    prevData.creditNote = { cae: result.cae || null, numero: result.numero || null, idComprobante: result.idComprobante || null, fecha: new Date().toISOString(), mensaje: result.mensaje || null };
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'cancelled', invoiceData: prevData } });
+
+    const accessToken = await getValidAccessToken(shop.shopDomain, shop);
+    if (accessToken) {
+      await setInvoiceMetafields({ shop: shop.shopDomain, accessToken }, orderId, {
+        status: 'cancelled',
+        cae: result.cae || undefined,
+        invoiceNumber: result.numero || undefined,
+      });
+    }
+
+    const msg = result.cae
+      ? 'Nota de credito emitida. CAE: ' + result.cae
+      : 'Nota de credito generada' + (result.mensaje ? ' (' + result.mensaje + ')' : '') + '.';
+    res.json({ success: true, message: msg });
+  } catch (error) {
+    logger.error('Credit-note error inesperado: ' + error.message);
+    if (error.authRequired) return res.status(403).json({ error: 'Token de acceso expirado. Reabri la app desde el admin de Shopify.', authRequired: true });
     res.status(500).json({ error: error.message });
   }
 });

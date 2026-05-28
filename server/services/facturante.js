@@ -132,6 +132,65 @@ class FacturanteService {
   }
 
   /**
+   * Anula un comprobante emitido generando su Nota de Crédito (Comprobante Inverso).
+   * Facturante deduce el tipo de NC según el comprobante original (FB→NCB, FA→NCA, etc.).
+   * @param {string|number} idComprobante - IdComprobante de Facturante de la factura original.
+   * @param {string} [observaciones] - Texto opcional al pie de la NC.
+   */
+  async anularComprobante(idComprobante, observaciones) {
+    var idNum = (idComprobante || '').toString().replace(/\D/g, '');
+    if (!idNum) throw new Error('IdComprobante invalido para anular');
+    var prefijo = (this.puntoVenta || '1').toString().padStart(4, '0');
+    var obsXml = observaciones
+      ? '<fac1:Observaciones>' + this._esc(observaciones) + '</fac1:Observaciones>'
+      : '<fac1:Observaciones i:nil="true"/>';
+    // Orden de hijos según el DataContract (alfabético): Autenticacion, ComprobantesAAnular,
+    // FechaEmision, Observaciones, PuntoVenta, ReplicarOrdenCompra. ComprobantesAAnular es
+    // ArrayOfint del namespace de Microsoft Serialization (items <int>).
+    var body = '<fac:CrearAnulacionFull><fac:request>' +
+      this._auth() +
+      '<fac1:ComprobantesAAnular xmlns:arr="http://schemas.microsoft.com/2003/10/Serialization/Arrays"><arr:int>' + idNum + '</arr:int></fac1:ComprobantesAAnular>' +
+      '<fac1:FechaEmision>' + new Date().toISOString().split('.')[0] + '</fac1:FechaEmision>' +
+      obsXml +
+      '<fac1:PuntoVenta>' + prefijo + '</fac1:PuntoVenta>' +
+      '<fac1:ReplicarOrdenCompra>false</fac1:ReplicarOrdenCompra>' +
+      '</fac:request></fac:CrearAnulacionFull>';
+    var xml = this._envelope('CrearAnulacionFull', body);
+    logger.info('CrearAnulacionFull: anulando idComprobante=' + idNum + ' prefijo=' + prefijo);
+    try {
+      var res = await this._post('CrearAnulacionFull', xml);
+      var rawStr = String(res.data || '');
+      logger.info('CrearAnulacionFull HTTP status=' + res.status + ' raw (primeros 1200): ' + rawStr.substring(0, 1200));
+
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        logger.error('CrearAnulacionFull SOAP Fault: ' + faultString);
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+
+      var estado = this._extractTag(rawStr, 'Estado');
+      var mensaje = this._extractTag(rawStr, 'Mensaje');
+      var codigo = this._extractTag(rawStr, 'Codigo');
+      // Datos de la NC generada (pueden venir dentro de ComprobantesAnulados):
+      var cae = this._extractTag(rawStr, 'CAE') || this._extractTag(rawStr, 'Cae') || this._extractTag(rawStr, 'cae');
+      var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'NroComprobante') || this._extractTag(rawStr, 'Numero');
+      var idNc = this._extractTag(rawStr, 'IdComprobante');
+
+      if (estado && estado.toUpperCase() !== 'OK') {
+        throw new Error(mensaje || ('Estado inesperado: ' + estado + (codigo ? ' (codigo ' + codigo + ')' : '')));
+      }
+      return { estado: 'OK', mensaje: mensaje, codigo: codigo, cae: cae || null, numero: numero || null, idComprobante: idNc || null, raw: rawStr.substring(0, 2000) };
+    } catch (err) {
+      if (err.response) {
+        logger.error('CrearAnulacionFull HTTP error status=' + err.response.status + ' body=' + JSON.stringify(err.response.data || '').substring(0, 500));
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
+      logger.error('CrearAnulacionFull error: ' + err.message);
+      throw err;
+    }
+  }
+
+  /**
    * Consulta el estado de un comprobante ya emitido por su IdComprobante.
    * Útil para hacer polling cuando el webhook de Facturante no llega.
    */
