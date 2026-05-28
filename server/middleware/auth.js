@@ -1,4 +1,4 @@
-﻿const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -7,7 +7,7 @@ const verifyToken = (req, res, next) => {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const payload = jwt.verify(token, process.env.SHOPIFY_API_SECRET);
+    const payload = jwt.verify(token, process.env.SHOPIFY_API_SECRET, { algorithms: ['HS256'], clockTolerance: 10 });
     const shopUrl = new URL(payload.dest);
     req.shopDomain = shopUrl.hostname;
     next();

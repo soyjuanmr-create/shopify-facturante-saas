@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 require('@shopify/shopify-api/adapters/node');
 const { shopifyApi, ApiVersion, BillingInterval, Session } = require('@shopify/shopify-api');
 const prisma = require('../models/prisma');
@@ -84,7 +84,7 @@ const customSessionStorage = {
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET,
-  scopes: (process.env.SCOPES || 'read_orders,write_orders,read_themes').split(','),
+  scopes: (process.env.SCOPES || 'read_customers,read_orders,write_orders,read_products').split(','),
   hostName: (process.env.SHOPIFY_APP_URL || 'localhost:3000').replace(/https?:\/\//, ''),
   hostScheme: 'https',
   apiVersion: ApiVersion.April25,

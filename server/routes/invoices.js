@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const prisma = require('../models/prisma');
 const axios = require('axios');
@@ -6,6 +6,7 @@ const FacturanteMapper = require('../utils/facturanteMapper');
 const FacturanteService = require('../services/facturante');
 const logger = require('../utils/logger');
 const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
+const { getValidAccessToken } = require('../utils/tokenUtils');
 
 async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   const url = 'https://' + shopDomain + '/admin/api/2025-04/graphql.json';
@@ -19,7 +20,9 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   } catch (err) {
     if (err.response) {
       const detail = JSON.stringify(err.response.data);
-      throw new Error('Shopify ' + err.response.status + ' for ' + shopDomain + ' tok=' + (accessToken || '').substring(0, 12) + ': ' + detail);
+      const e = new Error('Shopify ' + err.response.status + ' for ' + shopDomain + ' tok=' + (accessToken || '').substring(0, 12) + ': ' + detail);
+      if (err.response.status === 401) e.authRequired = true;
+      throw e;
     }
     throw err;
   }
@@ -28,33 +31,43 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
 router.get('/orders', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
-    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
+    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa', authRequired: true });
 
-    // Priorizar Session table; fallback a Shop table
-    const sessionRecord = await prisma.session.findFirst({
-      where: { shop: req.shopDomain, isOnline: false },
-      orderBy: { expires: 'desc' },
-    });
-    const accessToken = (sessionRecord && sessionRecord.accessToken) ? sessionRecord.accessToken : shop.accessToken;
+    const accessToken = await getValidAccessToken(req.shopDomain, shop);
 
-    logger.info('Orders: shop=' + req.shopDomain + ' sessionTable=' + (sessionRecord ? 'found,tok=' + (sessionRecord.accessToken || '').substring(0, 8) : 'NOT FOUND') + ' shopTable=tok=' + (shop.accessToken || '').substring(0, 8));
-
-    if (!accessToken) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
+    if (!accessToken) {
+      return res.status(403).json({
+        error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).',
+        authRequired: true
+      });
+    }
 
     const cursor = req.query.cursor || null;
     const afterClause = cursor ? ', after: "' + cursor + '"' : '';
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "financial_status:paid"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } customer { firstName lastName email } } } } }';
+    // Busqueda server-side: el termino se pasa al query de Shopify para encontrar ordenes
+    // mas alla de las primeras 50 (por nro de orden, email, etc.). Se sanitiza para no
+    // romper el string literal de GraphQL (se eliminan comillas, backslash, #, saltos).
+    const search = (req.query.search || '').replace(/[^\w@.\-\s]/g, ' ').trim();
+    var queryFilter = 'financial_status:paid';
+    if (search) queryFilter += ' AND ' + search;
+    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "' + queryFilter + '"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } } } } }';
     const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
-    const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } } });
+    const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } }, select: { shopifyOrderId: true, status: true, cae: true, errorMessage: true, customerName: true } });
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: order.customer ? { first_name: order.customer.firstName, last_name: order.customer.lastName } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: (inv && inv.customerName) ? { first_name: inv.customerName, last_name: '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
-  } catch (error) { logger.error('Error loading orders: ' + error.message); res.status(500).json({ error: error.message }); }
+  } catch (error) {
+    logger.error('Error loading orders: ' + error.message);
+    if (error.authRequired || error.message.includes('401')) {
+      return res.status(403).json({ error: 'Token de acceso expirado. Re-autorizando...', authRequired: true });
+    }
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.get('/stats', async (req, res) => {
@@ -80,35 +93,51 @@ router.post('/generate', async (req, res) => {
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
     const existing = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
     if (existing && existing.status === 'completed') return res.json({ success: true, message: 'Factura ya emitida. CAE: ' + existing.cae });
-    const sessionRecord2 = await prisma.session.findFirst({
-      where: { shop: shop.shopDomain, isOnline: false },
-      orderBy: { expires: 'desc' },
-    });
-    const accessToken2 = (sessionRecord2 && sessionRecord2.accessToken) ? sessionRecord2.accessToken : shop.accessToken;
-    if (!accessToken2) return res.status(403).json({ error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).', authRequired: true });
+    const accessToken2 = await getValidAccessToken(shop.shopDomain, shop);
+    if (!accessToken2) {
+      return res.status(403).json({
+        error: 'Token de acceso no disponible. Se requiere autorizacion (OAuth).',
+        authRequired: true
+      });
+    }
     const session = { shop: shop.shopDomain, accessToken: accessToken2 };
-    const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name email taxesIncluded totalPriceSet { presentmentMoney { amount } } billingAddress { firstName lastName address1 address2 city province zip company } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
-    const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
-    const gqlOrder = orderData.data ? orderData.data.order : null;
-    if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
-    const ba = gqlOrder.billingAddress || {};
-    const orderForMapper = {
-      id: orderId, name: gqlOrder.name, order_number: gqlOrder.name, email: gqlOrder.email,
-      total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
-      billing_address: { first_name: ba.firstName, last_name: ba.lastName, address1: ba.address1, city: ba.city, province: ba.province, zip: ba.zip, company: ba.company },
-      note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
-      line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
-      shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
-    };
-    logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
-    const facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
-    logger.info('FacturaData items: ' + JSON.stringify(facturaData.items.map(function (i) { return { desc: i.descripcion, pu: i.precio_unitario, bon: i.bonificacion, qty: i.cantidad }; })));
+
+    let facturaData;
+    let orderName;
+
+    // Ruta 1: Si el webhook ya guardó invoiceData completa, usarla directamente
+    // El REST webhook recibe TODOS los datos del cliente sin necesitar campos protegidos
+    if (existing && existing.invoiceData) {
+      facturaData = typeof existing.invoiceData === 'string' ? JSON.parse(existing.invoiceData) : existing.invoiceData;
+      orderName = existing.shopifyOrderNumber || orderId;
+      logger.info('Generate: usando invoiceData del webhook para orden ' + orderId);
+    } else {
+      // Ruta 2: No hay datos del webhook — consultar GraphQL
+      // billingAddress omitido: todos sus sub-campos son protegidos en apps públicas
+      const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
+      const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+      const gqlOrder = orderData.data ? orderData.data.order : null;
+      if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
+      orderName = gqlOrder.name;
+      const orderForMapper = {
+        id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
+        total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
+        billing_address: {},
+        note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
+        line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
+        shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
+      };
+      logger.info('LineItems prices: ' + JSON.stringify(orderForMapper.line_items.map(function (i) { return { title: i.name, price: i.price, discounted: i.discounted_unit_price }; })));
+      facturaData = FacturanteMapper.mapShopifyToFacturante(orderForMapper);
+    }
+
+    logger.info('FacturaData: cliente=' + facturaData.cliente.nombre + ' items=' + facturaData.items.length);
     const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
     const webhookUrl = process.env.SHOPIFY_APP_URL ? process.env.SHOPIFY_APP_URL.replace(/\/$/, '') + '/webhooks/facturante' : null;
     let resultado2;
     try { resultado2 = await facturante.crearComprobante(facturaData, webhookUrl); }
     catch (fe) {
-      await prisma.invoice.upsert({ where: { shopifyOrderId: orderId.toString() }, update: { status: 'failed', errorMessage: fe.message }, create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'failed', errorMessage: fe.message, invoiceData: facturaData } });
+      await prisma.invoice.upsert({ where: { shopifyOrderId: orderId.toString() }, update: { status: 'failed', errorMessage: fe.message }, create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: orderName, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: 'failed', errorMessage: fe.message, invoiceData: facturaData } });
       logger.error('Generate invoice error: ' + fe.message);
       return res.status(500).json({ error: fe.message });
     }
@@ -122,8 +151,8 @@ router.post('/generate', async (req, res) => {
     }
     await prisma.invoice.upsert({
       where: { shopifyOrderId: orderId.toString() },
-      update: { status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null },
-      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: gqlOrder.name, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
+      update: { status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
+      create: { shopId: shop.id, shopifyOrderId: orderId.toString(), shopifyOrderNumber: orderName, customerName: facturaData.cliente.nombre, customerEmail: facturaData.cliente.email, totalAmount: parseFloat(facturaData.importe_total), status: invoiceStatus, facturanteInvoiceId: resultado2.idComprobante ? resultado2.idComprobante.toString() : null, cae: invoiceCae, facturanteInvoiceNumber: invoiceNumero, processedAt: invoiceStatus === 'completed' ? new Date() : null, invoiceData: facturaData },
     });
     await setInvoiceMetafields(session, orderId, invoiceStatus === 'completed'
       ? { status: 'completed', cae: invoiceCae, invoiceNumber: invoiceNumero }
@@ -132,7 +161,64 @@ router.post('/generate', async (req, res) => {
       ? 'Factura emitida. CAE: ' + invoiceCae
       : 'Comprobante enviado a Facturante (ID: ' + resultado2.idComprobante + '). Esperando autorizacion...';
     res.json({ success: true, message: msg2, status: invoiceStatus });
-  } catch (error) { logger.error('Generate invoice error: ' + error.message); res.status(500).json({ error: error.message }); }
+  } catch (error) {
+    logger.error('Generate invoice error: ' + error.message);
+    if (error.authRequired) {
+      return res.status(403).json({ error: 'Token de acceso expirado. Reabrí la app desde el admin de Shopify.', authRequired: true });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Genera la Nota de Credito (anulacion total) de una factura ya autorizada.
+// Usa CrearAnulacionFull de Facturante, que asocia la NC al comprobante original por su Id.
+router.post('/credit-note', async (req, res) => {
+  try {
+    const orderId = req.body.orderId;
+    if (!orderId) return res.status(400).json({ error: 'orderId requerido' });
+    const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
+    if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
+
+    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    if (!invoice) return res.status(404).json({ error: 'No existe una factura registrada para esta orden.' });
+    if (invoice.status === 'cancelled') return res.json({ success: true, message: 'Esta factura ya tiene una nota de credito emitida.' });
+    if (invoice.status !== 'completed') return res.status(400).json({ error: 'Solo se puede anular una factura autorizada (con CAE). Estado actual: ' + invoice.status });
+    if (!invoice.facturanteInvoiceId) return res.status(400).json({ error: 'La factura no tiene ID de Facturante; no se puede anular automaticamente.' });
+
+    const facturante = new FacturanteService({ empresa: shop.empresa, usuario: shop.usuario, hash: shop.hash, puntoVenta: shop.puntoVenta });
+    let result;
+    try {
+      result = await facturante.anularComprobante(invoice.facturanteInvoiceId, 'Nota de credito orden ' + invoice.shopifyOrderNumber);
+    } catch (fe) {
+      logger.error('Credit-note error para orderId=' + orderId + ': ' + fe.message);
+      return res.status(500).json({ error: fe.message });
+    }
+
+    const prevData = invoice.invoiceData
+      ? (typeof invoice.invoiceData === 'string' ? JSON.parse(invoice.invoiceData) : invoice.invoiceData)
+      : {};
+    prevData.creditNote = { cae: result.cae || null, numero: result.numero || null, idComprobante: result.idComprobante || null, fecha: new Date().toISOString(), mensaje: result.mensaje || null };
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'cancelled', invoiceData: prevData } });
+
+    const accessToken = await getValidAccessToken(shop.shopDomain, shop);
+    if (accessToken) {
+      await setInvoiceMetafields({ shop: shop.shopDomain, accessToken }, orderId, {
+        status: 'cancelled',
+        cae: result.cae || undefined,
+        invoiceNumber: result.numero || undefined,
+      });
+    }
+
+    const msg = result.cae
+      ? 'Nota de credito emitida. CAE: ' + result.cae
+      : 'Nota de credito generada' + (result.mensaje ? ' (' + result.mensaje + ')' : '') + '.';
+    res.json({ success: true, message: msg });
+  } catch (error) {
+    logger.error('Credit-note error inesperado: ' + error.message);
+    if (error.authRequired) return res.status(403).json({ error: 'Token de acceso expirado. Reabri la app desde el admin de Shopify.', authRequired: true });
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Endpoint de polling manual: consulta el estado real a Facturante y actualiza la BD

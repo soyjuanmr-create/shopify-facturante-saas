@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Layout, Card, Text, Banner, BlockStack, InlineStack, Button, Badge, SkeletonBodyText, CalloutCard, Icon } from '@shopify/polaris';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Page, Layout, Card, Text, Banner, BlockStack, InlineStack, InlineGrid, Button, Badge, SkeletonBodyText, CalloutCard } from '@shopify/polaris';
 import { CheckCircleIcon, OrderIcon, ReceiptIcon, ClockIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../hooks/useAuthFetch';
@@ -12,15 +12,6 @@ export default function HomePage() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   const [dismissed, setDismissed] = useState(false);
-  const [dniBannerDismissed, setDniBannerDismissed] = useState(
-    () => localStorage.getItem('shopifac_dni_banner_dismissed') === '1'
-  );
-
-  const shop = new URLSearchParams(window.location.search).get('shop') || '';
-  const storeSlug = shop.replace('.myshopify.com', '');
-  const checkoutEditorUrl = storeSlug
-    ? `https://admin.shopify.com/store/${storeSlug}/settings/checkout`
-    : 'https://admin.shopify.com';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,40 +27,12 @@ export default function HomePage() {
   useEffect(() => { load(); }, [load]);
   var isConfigured = settings && settings.hasCredentials;
 
-  if (loading) return (<Page title="Shopifac"><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
+  if (loading) return (<Page title="Shopifac" fullWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={4} /></Card></Layout.Section></Layout></Page>);
 
   return (
-    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina">
+    <Page title="Shopifac" subtitle="Facturacion electronica para Argentina" fullWidth>
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
-        {isConfigured && settings.isPlus && !dniBannerDismissed && (
-          <Banner
-            title="Activar campo DNI/CUIT en el checkout"
-            tone="info"
-            action={{
-              content: 'Ir al editor de checkout',
-              onAction: () => window.open(checkoutEditorUrl, '_blank'),
-            }}
-            onDismiss={() => {
-              localStorage.setItem('shopifac_dni_banner_dismissed', '1');
-              setDniBannerDismissed(true);
-            }}
-          >
-            <p>Agrega el bloque "Campo DNI/CUIT - Shopifac" en el editor de checkout para que tus clientes puedan ingresar su documento al comprar. Este dato se usa para emitir la factura electronica.</p>
-          </Banner>
-        )}
-        {isConfigured && !settings.isPlus && !dniBannerDismissed && (
-          <Banner
-            title="DNI/CUIT del cliente"
-            tone="info"
-            onDismiss={() => {
-              localStorage.setItem('shopifac_dni_banner_dismissed', '1');
-              setDniBannerDismissed(true);
-            }}
-          >
-            <p>El DNI/CUIT se ingresa al generar cada factura desde la seccion Ordenes. El campo automatico en el checkout esta disponible para tiendas con plan Shopify Plus.</p>
-          </Banner>
-        )}
         {isConfigured ? (
           <Banner title="Facturante conectado" tone="success">
             <p>Las facturas se {settings.autoInvoice ? 'emiten automaticamente al recibir un pago' : 'pueden emitir manualmente desde Ordenes'}.</p>
@@ -89,12 +52,12 @@ export default function HomePage() {
           </Banner>
         )}
         {isConfigured && stats && (
-          <InlineStack gap="400" wrap>
+          <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Total</Text><Text variant="headingXl" fontWeight="bold">{stats.total}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Facturadas</Text><Text variant="headingXl" fontWeight="bold">{stats.invoiced}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Pendientes</Text><Text variant="headingXl" fontWeight="bold">{stats.pending}</Text></BlockStack></Card>
             <Card><BlockStack gap="200"><Text variant="bodySm" tone="subdued">Con error</Text><Text variant="headingXl" fontWeight="bold">{stats.errors}</Text></BlockStack></Card>
-          </InlineStack>
+          </InlineGrid>
         )}
         {isConfigured && (
           <Card>

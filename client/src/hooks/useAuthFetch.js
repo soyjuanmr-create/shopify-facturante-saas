@@ -10,9 +10,16 @@ export function useAuthFetch() {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       if (res.status === 403 && err.authRequired) {
-        // Obtenemos el origin o domain de shopify usando query o window params y redirigimos a la ruta OAuth
-        const urlParams = new URLSearchParams(window.location.search);
-        let shop = urlParams.get('shop') || (window.shopify && window.shopify.config && window.shopify.config.shop);
+        // Extraer shop del JWT (dest claim) — más confiable que URL params o shopify.config
+        let shop = null;
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          shop = new URL(payload.dest).hostname;
+        } catch (e) {
+          // fallback a URL params o App Bridge config
+          const urlParams = new URLSearchParams(window.location.search);
+          shop = urlParams.get('shop') || (window.shopify && window.shopify.config && window.shopify.config.shop);
+        }
         if (shop) {
           window.open('/api/auth?shop=' + encodeURIComponent(shop), '_top');
           return new Promise(() => { }); // Freeze execution while redirecting
