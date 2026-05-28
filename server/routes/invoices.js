@@ -28,6 +28,15 @@ async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   }
 }
 
+// Flag de proceso: si la app no tiene aprobado el acceso a datos protegidos del cliente,
+// se desactiva tras el primer rechazo para no reintentar con esos campos en cada request.
+var customerFieldsAllowed = true;
+
+function buildOrdersQuery(queryFilter, afterClause, withCustomer) {
+  var customerFields = withCustomer ? ' customer { firstName lastName displayName }' : '';
+  return '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "' + queryFilter + '"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } }' + customerFields + ' } } } }';
+}
+
 router.get('/orders', async (req, res) => {
   try {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
@@ -50,15 +59,33 @@ router.get('/orders', async (req, res) => {
     const search = (req.query.search || '').replace(/[^\w@.\-\s]/g, ' ').trim();
     var queryFilter = 'financial_status:paid';
     if (search) queryFilter += ' AND ' + search;
-    const gqlQuery = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "' + queryFilter + '"' + afterClause + ') { pageInfo { hasNextPage endCursor } edges { node { id name createdAt displayFinancialStatus totalPriceSet { presentmentMoney { amount } } } } } }';
-    const data = await shopifyGraphql(req.shopDomain, accessToken, gqlQuery);
+    // Se incluye customer (protected customer data, declarado en shopify.app.toml) para
+    // mostrar el nombre tambien en ordenes aun no facturadas. Si la app todavia no tiene
+    // aprobado el acceso, se reintenta sin esos campos y se cae al nombre de la factura local.
+    var data;
+    if (customerFieldsAllowed) {
+      try {
+        data = await shopifyGraphql(req.shopDomain, accessToken, buildOrdersQuery(queryFilter, afterClause, true));
+      } catch (e) {
+        if (!e.authRequired && /not approved|protected|access the Customer|ACCESS_DENIED/i.test(e.message)) {
+          logger.warn('Campos de customer no disponibles (protected data); usando fallback al nombre de la factura. ' + e.message);
+          customerFieldsAllowed = false;
+        } else {
+          throw e;
+        }
+      }
+    }
+    if (!data) data = await shopifyGraphql(req.shopDomain, accessToken, buildOrdersQuery(queryFilter, afterClause, false));
     const graphqlOrders = data.data.orders.edges.map(function (e) { return e.node; });
     const orderIds = graphqlOrders.map(function (o) { return o.id.split('/').pop(); });
     const localInvoices = await prisma.invoice.findMany({ where: { shopifyOrderId: { in: orderIds } }, select: { shopifyOrderId: true, status: true, cae: true, errorMessage: true, customerName: true } });
     const orders = graphqlOrders.map(function (order) {
       var shortId = order.id.split('/').pop();
       var inv = localInvoices.find(function (i) { return i.shopifyOrderId === shortId; });
-      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: (inv && inv.customerName) ? { first_name: inv.customerName, last_name: '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
+      var sc = order.customer;
+      var shopifyName = sc ? (sc.displayName || ((sc.firstName || '') + ' ' + (sc.lastName || '')).trim()) : '';
+      var customerName = shopifyName || (inv && inv.customerName) || '';
+      return { id: shortId, order_number: order.name, total: order.totalPriceSet.presentmentMoney.amount, created_at: order.createdAt, customer: customerName ? { first_name: customerName, last_name: '' } : null, facturacion_status: inv ? inv.status : 'pending', cae: inv ? inv.cae : null, error_message: inv ? inv.errorMessage : null };
     });
     res.json({ orders: orders, pageInfo: data.data.orders.pageInfo });
   } catch (error) {
