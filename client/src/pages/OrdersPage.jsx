@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, InlineStack } from '@shopify/polaris';
+import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, InlineStack, Popover, ActionList, Icon } from '@shopify/polaris';
+import { MenuHorizontalIcon, SearchIcon } from '@shopify/polaris-icons';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
 export default function OrdersPage() {
@@ -14,6 +15,7 @@ export default function OrdersPage() {
   const [confirmId, setConfirmId] = useState(null);
   const [creditId, setCreditId] = useState(null);
   const [creditingId, setCreditingId] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(null);
   const [search, setSearch] = useState('');
   const [pageInfo, setPageInfo] = useState({ hasNextPage: false, endCursor: null });
 
@@ -106,7 +108,7 @@ export default function OrdersPage() {
       <BlockStack gap="500">
         {error && <Banner title="Error" tone="critical" onDismiss={() => setError(null)}><p>{error}</p></Banner>}
         {success && <Banner title="Exito" tone="success" onDismiss={() => setSuccess(null)}><p>{success}</p></Banner>}
-        <TextField placeholder="Buscar por nro. de orden o cliente..." value={search} onChange={setSearch} clearButton onClearButtonClick={() => setSearch('')} autoComplete="off" />
+        <TextField label="Buscar ordenes" labelHidden prefix={<Icon source={SearchIcon} tone="subdued" />} placeholder="Buscar por nro. de orden, cliente o email..." value={search} onChange={setSearch} clearButton onClearButtonClick={() => setSearch('')} autoComplete="off" />
         <Card padding="0">
           {orders.length === 0 ? (
             <EmptyState heading={search ? 'Sin resultados' : 'Sin ordenes'} image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png">
@@ -123,18 +125,27 @@ export default function OrdersPage() {
                   <IndexTable.Cell>{statusBadge(o)}</IndexTable.Cell>
                   <IndexTable.Cell>
                     {o.facturacion_status === 'completed'
-                      ? <BlockStack gap="100">
-                          <Text tone="success" variant="bodySm">CAE: ...{o.cae ? o.cae.slice(-6) : ''}</Text>
-                          <Button size="slim" variant="plain" tone="critical" onClick={() => setCreditId(o.id)} loading={creditingId === o.id}>Nota de credito</Button>
-                        </BlockStack>
+                      ? <InlineStack gap="200" blockAlign="center" align="space-between" wrap={false}>
+                          <Text tone="subdued" variant="bodySm">CAE …{o.cae ? o.cae.slice(-6) : ''}</Text>
+                          <Popover
+                            active={activeMenu === o.id}
+                            onClose={() => setActiveMenu(null)}
+                            activator={<Button variant="tertiary" icon={MenuHorizontalIcon} accessibilityLabel="Mas acciones" loading={creditingId === o.id} onClick={() => setActiveMenu(activeMenu === o.id ? null : o.id)} />}
+                          >
+                            <ActionList
+                              actionRole="menuitem"
+                              items={[{ content: 'Emitir nota de credito', destructive: true, onAction: () => { setActiveMenu(null); setCreditId(o.id); } }]}
+                            />
+                          </Popover>
+                        </InlineStack>
                       : o.facturacion_status === 'cancelled'
-                        ? <Text tone="subdued" variant="bodySm">NC emitida</Text>
+                        ? <Text tone="subdued" variant="bodySm">Nota de credito emitida</Text>
                       : o.facturacion_status === 'processing'
-                        ? <BlockStack gap="100">
-                          <Button size="slim" variant="plain" onClick={() => handleSyncStatus(o.id)} loading={syncingId === o.id}>Verificar estado</Button>
+                        ? <InlineStack gap="200">
+                          <Button size="slim" onClick={() => handleSyncStatus(o.id)} loading={syncingId === o.id}>Verificar estado</Button>
                           <Button size="slim" variant="plain" tone="critical" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>Reprocesar</Button>
-                        </BlockStack>
-                        : <Button size="slim" variant="secondary" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
+                        </InlineStack>
+                        : <Button size="slim" variant="primary" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
                           {o.facturacion_status === 'failed' ? 'Reintentar' : 'Facturar'}
                         </Button>}
                   </IndexTable.Cell>
