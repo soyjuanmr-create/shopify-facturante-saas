@@ -139,17 +139,50 @@ router.post('/generate', async (req, res) => {
       orderName = existing.shopifyOrderNumber || orderId;
       logger.info('Generate: usando invoiceData del webhook para orden ' + orderId);
     } else {
-      // Ruta 2: No hay datos del webhook — consultar GraphQL
-      // billingAddress omitido: todos sus sub-campos son protegidos en apps públicas
-      const gqlQuery2 = 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } } customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
-      const orderData = await shopifyGraphql(shop.shopDomain, accessToken2, gqlQuery2, { id: 'gid://shopify/Order/' + orderId });
+      // Ruta 2: No hay datos del webhook — consultar GraphQL.
+      // Se piden los campos protegidos declarados en shopify.app.toml (name + email).
+      // Si la app aun no tiene aprobado el acceso, se reintenta sin ellos (fallback a
+      // 'Consumidor Final'); la orden igual se factura, pero sin razon social.
+      function buildOrderQuery(withCustomer) {
+        var customerBlock = withCustomer
+          ? ' email billingAddress { firstName lastName company address1 address2 city province zip } shippingAddress { firstName lastName company address1 address2 city province zip } customer { firstName lastName email }'
+          : '';
+        return 'query($id: ID!) { order(id: $id) { id name taxesIncluded totalPriceSet { presentmentMoney { amount } }' + customerBlock + ' customAttributes { key value } shippingLine { title originalPriceSet { presentmentMoney { amount } } taxLines { rate } } lineItems(first: 50) { edges { node { title sku quantity originalUnitPriceSet { presentmentMoney { amount } } totalDiscountSet { presentmentMoney { amount } } discountAllocations { allocatedAmountSet { presentmentMoney { amount } } } taxLines { rate } } } } } }';
+      }
+      var orderData;
+      if (customerFieldsAllowed) {
+        try {
+          orderData = await shopifyGraphql(shop.shopDomain, accessToken2, buildOrderQuery(true), { id: 'gid://shopify/Order/' + orderId });
+        } catch (e) {
+          if (!e.authRequired && /not approved|protected|access the Customer|ACCESS_DENIED/i.test(e.message)) {
+            logger.warn('Generate: campos de customer no aprobados, facturando sin razon social. ' + e.message);
+            customerFieldsAllowed = false;
+          } else { throw e; }
+        }
+      }
+      if (!orderData) orderData = await shopifyGraphql(shop.shopDomain, accessToken2, buildOrderQuery(false), { id: 'gid://shopify/Order/' + orderId });
       const gqlOrder = orderData.data ? orderData.data.order : null;
       if (!gqlOrder) return res.status(404).json({ error: 'Orden no encontrada' });
       orderName = gqlOrder.name;
+      // Construir billing_address a partir de lo que Shopify devolvio. Si los sub-campos
+      // de address no estan en el scope aprobado, vienen null y el mapper cae a default.
+      var ba = gqlOrder.billingAddress || gqlOrder.shippingAddress || {};
+      var cust = gqlOrder.customer || {};
+      var billingForMapper = {
+        first_name: ba.firstName || cust.firstName || '',
+        last_name: ba.lastName || cust.lastName || '',
+        company: ba.company || '',
+        address1: ba.address1 || '',
+        address2: ba.address2 || '',
+        city: ba.city || '',
+        province: ba.province || '',
+        zip: ba.zip || '',
+      };
       const orderForMapper = {
         id: orderId, name: gqlOrder.name, order_number: gqlOrder.name,
         total_price: gqlOrder.totalPriceSet.presentmentMoney.amount, taxes_included: gqlOrder.taxesIncluded,
-        billing_address: {},
+        billing_address: billingForMapper,
+        email: gqlOrder.email || cust.email || '',
         note_attributes: (gqlOrder.customAttributes || []).map(function (a) { return { name: a.key, value: a.value }; }),
         line_items: gqlOrder.lineItems.edges.map(function (e) { var n = e.node; return { name: n.title, title: n.title, sku: n.sku, quantity: n.quantity, price: (n.originalUnitPriceSet && n.originalUnitPriceSet.presentmentMoney) ? n.originalUnitPriceSet.presentmentMoney.amount : "0", total_discount: (n.totalDiscountSet && n.totalDiscountSet.presentmentMoney) ? n.totalDiscountSet.presentmentMoney.amount : "0", discount_allocations: (n.discountAllocations || []).map(function (d) { return { amount: d.allocatedAmountSet.presentmentMoney.amount }; }), tax_lines: n.taxLines }; }),
         shipping_lines: gqlOrder.shippingLine ? [{ title: gqlOrder.shippingLine.title, price: gqlOrder.shippingLine.originalPriceSet.presentmentMoney.amount, tax_lines: gqlOrder.shippingLine.taxLines }] : [],
