@@ -89,6 +89,7 @@ async function syncProcessingInvoices() {
                         status: 'completed',
                         cae: caeStr,
                         facturanteInvoiceNumber: numStr,
+                        pdfUrl: result.pdfUrl || undefined,
                         processedAt: new Date()
                     },
                 });

@@ -54,6 +54,8 @@ model Invoice {
   status                  String    @default("pending")
   facturanteInvoiceId     String?
   facturanteInvoiceNumber String?
+  tipoComprobante         String?
+  pdfUrl                  String?
   cae                     String?
   errorMessage            String?
   invoiceData             Json?

@@ -218,9 +218,12 @@ class FacturanteService {
       var cae = this._extractTag(rawStr, 'CAE') || this._extractTag(rawStr, 'Cae') || this._extractTag(rawStr, 'cae');
       var numero = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'NroComprobante') || this._extractTag(rawStr, 'Numero');
       var msg = this._extractTag(rawStr, 'Mensaje') || this._extractTag(rawStr, 'Descripcion');
+      // URLPDF: link al comprobante legal en PDF (con QR de AFIP) generado por Facturante
+      var pdfUrl = this._extractTag(rawStr, 'URLPDF') || this._extractTag(rawStr, 'UrlPdf');
+      if (pdfUrl) pdfUrl = pdfUrl.replace(/&amp;/g, '&');
 
-      logger.info('DetalleComprobante parsed: estado=' + estado + ' cae=' + cae + ' msg=' + msg);
-      return { estado, cae, numero, mensaje: msg, raw: rawStr.substring(0, 2000) };
+      logger.info('DetalleComprobante parsed: estado=' + estado + ' cae=' + cae + ' pdf=' + (pdfUrl ? 'si' : 'no') + ' msg=' + msg);
+      return { estado, cae, numero, mensaje: msg, pdfUrl: pdfUrl || null, raw: rawStr.substring(0, 2000) };
     } catch (err) {
       // Si es error de red (axios) registrar el cuerpo de respuesta si existe
       if (err.response) {
@@ -228,6 +231,122 @@ class FacturanteService {
         throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
       }
       logger.error('DetalleComprobante error: ' + err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Reenvía por email un comprobante ya emitido (operación ReenviarComprobante).
+   * @param {string|number} idComprobante - IdComprobante de Facturante.
+   * @param {string} [direcciones] - Emails extra separados por coma. Si se omite,
+   *   Facturante reenvía al mail de facturación del cliente.
+   */
+  async reenviarComprobante(idComprobante, direcciones) {
+    var idNum = (idComprobante || '').toString().replace(/\D/g, '');
+    if (!idNum) throw new Error('IdComprobante invalido para reenviar');
+    var dirXml = direcciones
+      ? '<fac1:Direcciones>' + this._esc(direcciones) + '</fac1:Direcciones>'
+      : '<fac1:Direcciones i:nil="true"/>';
+    // Orden alfabético del DataContract: Autenticacion, Direcciones, IdComprobante,
+    // NoIncluirCC, NoIncluirMailFacturacion. Si se pasan direcciones explícitas se
+    // excluye el mail de facturación para no duplicar envíos.
+    var body = '<fac:ReenviarComprobante><fac:request>' +
+      this._auth() +
+      dirXml +
+      '<fac1:IdComprobante>' + idNum + '</fac1:IdComprobante>' +
+      '<fac1:NoIncluirCC>false</fac1:NoIncluirCC>' +
+      '<fac1:NoIncluirMailFacturacion>' + (direcciones ? 'true' : 'false') + '</fac1:NoIncluirMailFacturacion>' +
+      '</fac:request></fac:ReenviarComprobante>';
+    var xml = this._envelope('ReenviarComprobante', body);
+    logger.info('ReenviarComprobante: idComprobante=' + idNum + (direcciones ? ' direcciones=' + direcciones : ' (mail de facturacion)'));
+    try {
+      var res = await this._post('ReenviarComprobante', xml);
+      var rawStr = String(res.data || '');
+      logger.info('ReenviarComprobante HTTP status=' + res.status + ' raw (primeros 800): ' + rawStr.substring(0, 800));
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+      var estado = this._extractTag(rawStr, 'Estado');
+      var mensaje = this._extractTag(rawStr, 'Mensaje');
+      // Estado de ReenviarComprobante es numérico (0/OK = éxito, ver doc de errores)
+      if (estado && estado.toUpperCase() !== 'OK' && estado !== '0') {
+        throw new Error(mensaje || ('No se pudo reenviar el comprobante (estado ' + estado + ')'));
+      }
+      return { estado: estado, mensaje: mensaje };
+    } catch (err) {
+      if (err.response) {
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
+      logger.error('ReenviarComprobante error: ' + err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Crea una Nota de Crédito (parcial o por ítems) asociada a un comprobante original,
+   * vía CrearComprobanteFull (el Encabezado Full soporta el bloque Asociados que exige AFIP).
+   * @param {object} ncData - Igual a facturaData de crearComprobante pero con los ítems a acreditar.
+   *   ncData.tipo_comprobante debe ser 'NCA' o 'NCB' (se deriva del tipo de la factura original).
+   * @param {object} asociado - Comprobante original: { fecha: Date|string, numero: int, puntoVenta: int, tipo: 'FA'|'FB' }.
+   * @param {string} [webhookUrl] - Callback para la autorización asíncrona.
+   */
+  async crearNotaCredito(ncData, asociado, webhookUrl) {
+    var tipoNc = (ncData.tipo_comprobante || 'NCB').toUpperCase();
+    var cliente = ncData.cliente || {};
+    var items = this.formatearItems(ncData.items || []);
+    var self = this;
+    // ComprobanteItemFull: mismos campos que ComprobanteItem en orden alfabético
+    // (los opcionales como Atributos/GTIN/UnidadMedida se omiten: minOccurs=0).
+    var itemsXml = items.map(function (i) {
+      return '<fac2:ComprobanteItemFull><fac2:Bonificacion>' + i.Bonificacion + '</fac2:Bonificacion><fac2:Cantidad>' + i.Cantidad + '</fac2:Cantidad><fac2:Codigo>' + self._esc(i.Codigo) + '</fac2:Codigo><fac2:Detalle>' + self._esc(i.Detalle) + '</fac2:Detalle><fac2:Gravado>' + i.Gravado + '</fac2:Gravado><fac2:IVA>' + i.IVA + '</fac2:IVA><fac2:PrecioUnitario>' + i.PrecioUnitario + '</fac2:PrecioUnitario></fac2:ComprobanteItemFull>';
+    }).join('');
+    var fechaAsoc = asociado.fecha instanceof Date ? asociado.fecha.toISOString().split('.')[0] : String(asociado.fecha).split('.')[0];
+    var asociadosXml = '<fac2:Asociados><fac2:ComprobanteAsociado><fac2:FechaEmision>' + fechaAsoc + '</fac2:FechaEmision><fac2:Numero>' + parseInt(asociado.numero, 10) + '</fac2:Numero><fac2:PuntoVenta>' + parseInt(asociado.puntoVenta, 10) + '</fac2:PuntoVenta><fac2:Tipo>' + this._esc(asociado.tipo) + '</fac2:Tipo></fac2:ComprobanteAsociado></fac2:Asociados>';
+    var webhookXml = '';
+    if (webhookUrl) {
+      webhookXml = '<fac2:WebHook><fac2:Url>' + this._esc(webhookUrl) + '</fac2:Url><fac2:Headers><fac2:Header><fac2:Nombre>facturante-content-type</fac2:Nombre><fac2:Valor>application/json</fac2:Valor></fac2:Header></fac2:Headers></fac2:WebHook>';
+    }
+    var nroDoc = (cliente.nro_documento || '').toString().replace(/\D/g, '');
+    if (this.mapearTipoDocumento(cliente.tipo_documento) === 13) nroDoc = '0';
+    var prefijoDoc = (this.puntoVenta || '1').toString().padStart(4, '0');
+    var ahora = new Date().toISOString().split('.')[0];
+    var obs = ncData.observaciones || ('Nota de credito sobre ' + asociado.tipo + ' ' + asociado.numero);
+    // ClienteFull y ComprobanteEncabezadoFull: hijos en orden alfabético del DataContract.
+    // En el Encabezado Full no existen los campos de totales (SubTotal/Total/etc.): Facturante
+    // los calcula desde los ítems.
+    var clienteXml = '<fac1:Cliente><fac2:CodigoPostal>' + this._esc(cliente.codigo_postal || '-') + '</fac2:CodigoPostal><fac2:CondicionPago>1</fac2:CondicionPago><fac2:Contacto>-</fac2:Contacto><fac2:DireccionFiscal>' + this._esc((cliente.direccion || '-').substring(0, 100)) + '</fac2:DireccionFiscal><fac2:EnviarComprobante>true</fac2:EnviarComprobante><fac2:Localidad>' + this._esc(cliente.ciudad || '-') + '</fac2:Localidad><fac2:MailContacto>-</fac2:MailContacto><fac2:MailFacturacion>' + this._esc(cliente.email || '-') + '</fac2:MailFacturacion><fac2:NroDocumento>' + this._esc(nroDoc) + '</fac2:NroDocumento><fac2:PercibeIIBB>false</fac2:PercibeIIBB><fac2:PercibeIVA>false</fac2:PercibeIVA><fac2:Provincia>' + this._esc(cliente.provincia || '-') + '</fac2:Provincia><fac2:RazonSocial>' + this._esc((cliente.nombre || 'Consumidor Final').substring(0, 100)) + '</fac2:RazonSocial><fac2:Telefono>-</fac2:Telefono><fac2:TipoDocumento>' + this.mapearTipoDocumento(cliente.tipo_documento) + '</fac2:TipoDocumento><fac2:TratamientoImpositivo>' + this.mapearTratamientoImpositivo(tipoNc === 'NCA' ? 'FA' : 'FB') + '</fac2:TratamientoImpositivo></fac1:Cliente>';
+    var encabezadoXml = '<fac1:Encabezado>' + asociadosXml + '<fac2:Bienes>1</fac2:Bienes><fac2:CodigoPagoElectronico i:nil="true"/><fac2:CondicionVenta>1</fac2:CondicionVenta><fac2:EnviarComprobante>true</fac2:EnviarComprobante><fac2:FechaHora>' + ahora + '</fac2:FechaHora><fac2:FechaServDesde i:nil="true"/><fac2:FechaServHasta i:nil="true"/><fac2:FechaVtoPago>' + ahora + '</fac2:FechaVtoPago><fac2:ImporteImpuestosInternos>0</fac2:ImporteImpuestosInternos><fac2:ImportePercepcionesMunic>0</fac2:ImportePercepcionesMunic><fac2:Moneda>2</fac2:Moneda><fac2:Observaciones>' + this._esc(obs) + '</fac2:Observaciones><fac2:OrdenCompra i:nil="true"/><fac2:Prefijo>' + prefijoDoc + '</fac2:Prefijo><fac2:Remito i:nil="true"/><fac2:TipoComprobante>' + tipoNc + '</fac2:TipoComprobante><fac2:TipoDeCambio>1</fac2:TipoDeCambio>' + webhookXml + '</fac1:Encabezado>';
+    var body = '<fac:CrearComprobanteFull><fac:request>' + this._auth() + clienteXml + encabezadoXml + '<fac1:Items>' + itemsXml + '</fac1:Items></fac:request></fac:CrearComprobanteFull>';
+    var xml = this._envelope('CrearComprobanteFull', body);
+    logger.info('CrearComprobanteFull (NC ' + tipoNc + '): asociado ' + asociado.tipo + ' nro=' + asociado.numero + ' pv=' + asociado.puntoVenta + ' items=' + items.length);
+    try {
+      var res = await this._post('CrearComprobanteFull', xml);
+      var rawStr = String(res.data || '');
+      logger.info('CrearComprobanteFull raw (primeros 1200): ' + rawStr.substring(0, 1200));
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+      var estado = this._extractTag(rawStr, 'Estado');
+      var msg = this._extractTag(rawStr, 'Mensaje');
+      var idComp = this._extractTag(rawStr, 'IdComprobante');
+      var caeInline = this._extractTag(rawStr, 'CAE');
+      var numeroInline = this._extractTag(rawStr, 'NumeroComprobante') || this._extractTag(rawStr, 'Numero');
+      if (estado !== 'OK') throw new Error(msg || 'Estado inesperado: ' + estado);
+      return {
+        idComprobante: idComp,
+        estado: 'OK',
+        mensaje: msg,
+        cae: caeInline || null,
+        numero: numeroInline || null,
+        autorizado: !!caeInline,
+      };
+    } catch (err) {
+      if (err.response) {
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
+      logger.error('CrearComprobanteFull error: ' + err.message);
       throw err;
     }
   }
