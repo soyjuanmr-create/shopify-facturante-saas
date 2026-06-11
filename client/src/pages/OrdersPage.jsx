@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, InlineStack, Popover, ActionList, Icon } from '@shopify/polaris';
+import { Page, Card, IndexTable, Text, Badge, Banner, Button, BlockStack, EmptyState, SkeletonBodyText, Modal, TextField, Layout, InlineStack, Popover, ActionList, Icon, ChoiceList, Select, Checkbox } from '@shopify/polaris';
 import { MenuHorizontalIcon, SearchIcon } from '@shopify/polaris-icons';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 
@@ -13,8 +13,17 @@ export default function OrdersPage() {
   const [invoicingId, setInvoicingId] = useState(null);
   const [syncingId, setSyncingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
+  const [tipoComp, setTipoComp] = useState('auto');
   const [creditId, setCreditId] = useState(null);
   const [creditingId, setCreditingId] = useState(null);
+  const [ncMode, setNcMode] = useState(['total']);
+  const [ncInfo, setNcInfo] = useState(null);
+  const [ncSelection, setNcSelection] = useState({});
+  const [ncAmount, setNcAmount] = useState('');
+  const [resendId, setResendId] = useState(null);
+  const [resendEmails, setResendEmails] = useState('');
+  const [resending, setResending] = useState(false);
+  const [pdfLoadingId, setPdfLoadingId] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
   const [search, setSearch] = useState('');
   const [pageInfo, setPageInfo] = useState({ hasNextPage: false, endCursor: null });
@@ -48,22 +57,66 @@ export default function OrdersPage() {
   }, [orders, loadOrders, search]);
 
   const handleInvoice = useCallback(async () => {
-    var id = confirmId; setConfirmId(null); setInvoicingId(id); setError(null); setSuccess(null);
+    var id = confirmId; var tipo = tipoComp;
+    setConfirmId(null); setInvoicingId(id); setError(null); setSuccess(null);
     try {
-      var d = await fetch('/api/invoices/generate', { method: 'POST', body: JSON.stringify({ orderId: id }) });
+      var body = { orderId: id };
+      if (tipo === 'FA' || tipo === 'FB') body.tipoComprobante = tipo;
+      var d = await fetch('/api/invoices/generate', { method: 'POST', body: JSON.stringify(body) });
       if (d.success) { setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); loadOrders(null, search.trim()); }
       else setError(d.error || 'Error');
     } catch (e) { setError(e.message); } finally { setInvoicingId(null); }
-  }, [fetch, confirmId, loadOrders, search]);
+  }, [fetch, confirmId, tipoComp, loadOrders, search]);
+
+  const openCreditModal = useCallback(async (orderId) => {
+    setNcMode(['total']); setNcSelection({}); setNcAmount(''); setNcInfo(null);
+    setCreditId(orderId);
+    try {
+      var info = await fetch('/api/invoices/credit-note-info/' + orderId);
+      setNcInfo(info);
+    } catch (e) { setNcInfo({ partialAvailable: false, items: [] }); }
+  }, [fetch]);
 
   const handleCreditNote = useCallback(async () => {
-    var id = creditId; setCreditId(null); setCreditingId(id); setError(null); setSuccess(null);
+    var id = creditId; var mode = ncMode[0];
+    var body = { orderId: id };
+    if (mode === 'items') {
+      body.mode = 'partial';
+      body.items = Object.keys(ncSelection)
+        .filter(idx => ncSelection[idx] && ncSelection[idx].checked && parseFloat(ncSelection[idx].cantidad) > 0)
+        .map(idx => ({ index: parseInt(idx, 10), cantidad: parseFloat(ncSelection[idx].cantidad) }));
+      if (body.items.length === 0) { setError('Selecciona al menos un item para acreditar.'); return; }
+    } else if (mode === 'amount') {
+      body.mode = 'partial';
+      body.amount = parseFloat(ncAmount);
+      if (!(body.amount > 0)) { setError('Indica un monto valido.'); return; }
+    }
+    setCreditId(null); setCreditingId(id); setError(null); setSuccess(null);
     try {
-      var d = await fetch('/api/invoices/credit-note', { method: 'POST', body: JSON.stringify({ orderId: id }) });
+      var d = await fetch('/api/invoices/credit-note', { method: 'POST', body: JSON.stringify(body) });
       if (d.success) { setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); loadOrders(null, search.trim()); }
       else setError(d.error || 'Error');
     } catch (e) { setError(e.message); } finally { setCreditingId(null); }
-  }, [fetch, creditId, loadOrders, search]);
+  }, [fetch, creditId, ncMode, ncSelection, ncAmount, loadOrders, search]);
+
+  const handleViewPdf = useCallback(async (orderId, doc) => {
+    setPdfLoadingId(orderId); setError(null);
+    try {
+      var d = await fetch('/api/invoices/pdf/' + orderId + (doc === 'credit_note' ? '?doc=credit_note' : ''));
+      if (d.url) window.open(d.url, '_blank');
+      else setError(d.error || 'PDF no disponible');
+    } catch (e) { setError(e.message); } finally { setPdfLoadingId(null); }
+  }, [fetch]);
+
+  const handleResend = useCallback(async () => {
+    var id = resendId; var emails = resendEmails.trim();
+    setResending(true); setError(null); setSuccess(null);
+    try {
+      var d = await fetch('/api/invoices/resend-email', { method: 'POST', body: JSON.stringify({ orderId: id, emails: emails }) });
+      if (d.success) { setResendId(null); setResendEmails(''); setSuccess(d.message); if (typeof shopify !== 'undefined') shopify.toast.show(d.message); }
+      else setError(d.error || 'Error');
+    } catch (e) { setError(e.message); } finally { setResending(false); }
+  }, [fetch, resendId, resendEmails]);
 
   const handleSyncStatus = useCallback(async (orderId) => {
     setSyncingId(orderId); setError(null); setSuccess(null);
@@ -101,6 +154,27 @@ export default function OrdersPage() {
     return <Badge>Pendiente</Badge>;
   }
 
+  function rowMenu(o) {
+    var busy = creditingId === o.id || pdfLoadingId === o.id;
+    var items = [{ content: 'Ver factura (PDF)', onAction: () => { setActiveMenu(null); handleViewPdf(o.id); } }];
+    if (o.facturacion_status === 'completed') {
+      items.push({ content: 'Reenviar por email', onAction: () => { setActiveMenu(null); setResendEmails(''); setResendId(o.id); } });
+      items.push({ content: 'Emitir nota de credito', destructive: true, onAction: () => { setActiveMenu(null); openCreditModal(o.id); } });
+    }
+    if (o.facturacion_status === 'cancelled') {
+      items.push({ content: 'Ver nota de credito (PDF)', onAction: () => { setActiveMenu(null); handleViewPdf(o.id, 'credit_note'); } });
+    }
+    return (
+      <Popover
+        active={activeMenu === o.id}
+        onClose={() => setActiveMenu(null)}
+        activator={<Button variant="tertiary" icon={MenuHorizontalIcon} accessibilityLabel="Mas acciones" loading={busy} onClick={() => setActiveMenu(activeMenu === o.id ? null : o.id)} />}
+      >
+        <ActionList actionRole="menuitem" items={items} />
+      </Popover>
+    );
+  }
+
   if (loading) return (<Page title="Ordenes" fullWidth><Layout><Layout.Section><Card><SkeletonBodyText lines={8} /></Card></Layout.Section></Layout></Page>);
 
   return (
@@ -127,25 +201,19 @@ export default function OrdersPage() {
                     {o.facturacion_status === 'completed'
                       ? <InlineStack gap="200" blockAlign="center" align="space-between" wrap={false}>
                           <Text tone="subdued" variant="bodySm">CAE …{o.cae ? o.cae.slice(-6) : ''}</Text>
-                          <Popover
-                            active={activeMenu === o.id}
-                            onClose={() => setActiveMenu(null)}
-                            activator={<Button variant="tertiary" icon={MenuHorizontalIcon} accessibilityLabel="Mas acciones" loading={creditingId === o.id} onClick={() => setActiveMenu(activeMenu === o.id ? null : o.id)} />}
-                          >
-                            <ActionList
-                              actionRole="menuitem"
-                              items={[{ content: 'Emitir nota de credito', destructive: true, onAction: () => { setActiveMenu(null); setCreditId(o.id); } }]}
-                            />
-                          </Popover>
+                          {rowMenu(o)}
                         </InlineStack>
                       : o.facturacion_status === 'cancelled'
-                        ? <Text tone="subdued" variant="bodySm">Nota de credito emitida</Text>
+                        ? <InlineStack gap="200" blockAlign="center" align="space-between" wrap={false}>
+                            <Text tone="subdued" variant="bodySm">Nota de credito emitida</Text>
+                            {rowMenu(o)}
+                          </InlineStack>
                       : o.facturacion_status === 'processing'
                         ? <InlineStack gap="200">
                           <Button size="slim" onClick={() => handleSyncStatus(o.id)} loading={syncingId === o.id}>Verificar estado</Button>
-                          <Button size="slim" variant="plain" tone="critical" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>Reprocesar</Button>
+                          <Button size="slim" variant="plain" tone="critical" onClick={() => { setTipoComp('auto'); setConfirmId(o.id); }} loading={invoicingId === o.id}>Reprocesar</Button>
                         </InlineStack>
-                        : <Button size="slim" variant="primary" onClick={() => setConfirmId(o.id)} loading={invoicingId === o.id}>
+                        : <Button size="slim" variant="primary" onClick={() => { setTipoComp('auto'); setConfirmId(o.id); }} loading={invoicingId === o.id}>
                           {o.facturacion_status === 'failed' ? 'Reintentar' : 'Facturar'}
                         </Button>}
                   </IndexTable.Cell>
@@ -167,6 +235,17 @@ export default function OrdersPage() {
               <Modal.Section>
                 <BlockStack gap="300">
                   <Text>Generar factura electronica via Facturante para esta orden?</Text>
+                  <Select
+                    label="Tipo de comprobante"
+                    options={[
+                      { label: 'Automatico (segun CUIT/DNI del cliente)', value: 'auto' },
+                      { label: 'Factura A (forzar)', value: 'FA' },
+                      { label: 'Factura B (forzar)', value: 'FB' },
+                    ]}
+                    value={tipoComp}
+                    onChange={setTipoComp}
+                    helpText="Para Factura A el cliente debe tener un CUIT valido como responsable inscripto."
+                  />
                   {confirmOrder && confirmOrder.facturacion_status === 'failed' && (
                     <Banner tone="warning">
                       <p>Si el error fue por falta de documento: asegurate de que el cliente haya ingresado su DNI o CUIT en el checkout. Para ordenes existentes, podes editarlas en Shopify y agregar el atributo <strong>documento_identidad</strong> manualmente.</p>
@@ -180,17 +259,86 @@ export default function OrdersPage() {
         })()}
         {(() => {
           var creditOrder = orders.find(o => o.id === creditId);
+          var mode = ncMode[0];
           return (
             <Modal open={!!creditId} onClose={() => setCreditId(null)} title="Emitir nota de credito" primaryAction={{ content: 'Emitir nota de credito', destructive: true, onAction: handleCreditNote }} secondaryActions={[{ content: 'Cancelar', onAction: () => setCreditId(null) }]}>
               <Modal.Section>
                 <BlockStack gap="300">
-                  <Text>Se emitira una nota de credito que anula la factura {creditOrder ? 'de la orden #' + creditOrder.order_number : ''} por el total.</Text>
-                  <Banner tone="warning"><p>Esta accion genera un comprobante legal ante AFIP/ARCA y <strong>no se puede deshacer</strong>. Confirma solo si necesitas anular la factura completa.</p></Banner>
+                  <Text>Nota de credito sobre la factura {creditOrder ? 'de la orden #' + creditOrder.order_number : ''}.</Text>
+                  <ChoiceList
+                    title="Alcance"
+                    choices={[
+                      { label: 'Total — anula la factura completa', value: 'total' },
+                      { label: 'Parcial por items', value: 'items', disabled: !(ncInfo && ncInfo.partialAvailable), helpText: ncInfo && !ncInfo.partialAvailable ? 'No disponible: faltan datos del comprobante original.' : undefined },
+                      { label: 'Parcial por monto', value: 'amount', disabled: !(ncInfo && ncInfo.partialAvailable) },
+                    ]}
+                    selected={ncMode}
+                    onChange={setNcMode}
+                  />
+                  {mode === 'items' && ncInfo && (
+                    <BlockStack gap="200">
+                      {ncInfo.items.map(it => {
+                        var sel = ncSelection[it.index] || { checked: false, cantidad: String(it.cantidad) };
+                        return (
+                          <InlineStack key={it.index} gap="300" blockAlign="center" wrap={false}>
+                            <div style={{ flex: 1 }}>
+                              <Checkbox
+                                label={it.descripcion}
+                                checked={sel.checked}
+                                onChange={(checked) => setNcSelection({ ...ncSelection, [it.index]: { ...sel, checked } })}
+                              />
+                            </div>
+                            <div style={{ width: 90 }}>
+                              <TextField
+                                label="Cantidad"
+                                labelHidden
+                                type="number"
+                                min={1}
+                                max={it.cantidad}
+                                disabled={!sel.checked}
+                                value={sel.cantidad}
+                                onChange={(v) => setNcSelection({ ...ncSelection, [it.index]: { ...sel, cantidad: v } })}
+                                suffix={'/ ' + it.cantidad}
+                                autoComplete="off"
+                              />
+                            </div>
+                          </InlineStack>
+                        );
+                      })}
+                    </BlockStack>
+                  )}
+                  {mode === 'amount' && (
+                    <TextField
+                      label="Monto a acreditar (IVA incluido)"
+                      type="number"
+                      prefix="$"
+                      value={ncAmount}
+                      onChange={setNcAmount}
+                      helpText="Se emite una NC por este importe final, asociada a la factura original."
+                      autoComplete="off"
+                    />
+                  )}
+                  <Banner tone="warning"><p>Esta accion genera un comprobante legal ante AFIP/ARCA y <strong>no se puede deshacer</strong>.{mode === 'total' ? ' La factura quedara anulada por el total.' : ' La factura original sigue vigente; la NC descuenta el importe acreditado.'}</p></Banner>
                 </BlockStack>
               </Modal.Section>
             </Modal>
           );
         })()}
+        <Modal open={!!resendId} onClose={() => setResendId(null)} title="Reenviar comprobante por email" primaryAction={{ content: 'Reenviar', onAction: handleResend, loading: resending }} secondaryActions={[{ content: 'Cancelar', onAction: () => setResendId(null) }]}>
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text>Facturante reenviara el comprobante en PDF por email.</Text>
+              <TextField
+                label="Direcciones de envio (opcional)"
+                placeholder="ejemplo@mail.com, otro@mail.com"
+                value={resendEmails}
+                onChange={setResendEmails}
+                helpText="Si lo dejas vacio, se reenvia al email de facturacion del cliente."
+                autoComplete="off"
+              />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
       </BlockStack>
     </Page>
   );

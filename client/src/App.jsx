@@ -5,6 +5,7 @@ import es from '@shopify/polaris/locales/es.json';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import OrdersPage from './pages/OrdersPage';
+import InvoicesPage from './pages/InvoicesPage';
 import SettingsPage from './pages/SettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -16,12 +17,14 @@ export default function App() {
         <ui-nav-menu>
           <a href="/" rel="home">Inicio</a>
           <a href="/orders">Ordenes</a>
+          <a href="/invoices">Comprobantes</a>
           <a href="/settings">Configuracion</a>
         </ui-nav-menu>
         <ErrorBoundary>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/invoices" element={<InvoicesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<HomePage />} />
           </Routes>

@@ -255,6 +255,7 @@ router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
       estado: (parsedData.Estado || parsedData.estado || '').toLowerCase().trim(),
       mensaje: parsedData.Mensaje || parsedData.mensaje || parsedData.Descripcion || parsedData.descripcion || '',
       errores: parsedData.Errores || parsedData.errores || '',
+      pdfUrl: parsedData.URLPDF || parsedData.UrlPdf || parsedData.urlPdf || parsedData.PdfUrl || null,
     };
 
     logger.info('Facturante webhook normalized: id=' + normalizedData.idComprobante +
@@ -300,6 +301,7 @@ router.post('/facturante', express.raw({ type: '*/*' }), async (req, res) => {
           status: 'completed',
           facturanteInvoiceNumber: numStr,
           cae: caeStr,
+          pdfUrl: normalizedData.pdfUrl || undefined,
           processedAt: new Date()
         },
       });
