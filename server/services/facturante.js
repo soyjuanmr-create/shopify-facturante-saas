@@ -63,7 +63,9 @@ class FacturanteService {
       var pu = Number(item.precio_unitario) || 0;
       var bon = Number(item.bonificacion) || 0;
       var cant = Number(item.cantidad) || 1;
-      var alic = Number(item.alicuota_iva) || 21;
+      // IVA 0 es valido (exento/no gravado): solo cae al 21% si el campo falta o no es numero
+      var alic = Number(item.alicuota_iva);
+      if (!Number.isFinite(alic)) alic = 21;
       return { Codigo: (item.codigo || 'PROD' + (idx + 1)).substring(0, 20), Detalle: (item.descripcion || 'Producto').substring(0, 250), Cantidad: cant, PrecioUnitario: pu.toFixed(3), Bonificacion: bon.toFixed(3), IVA: alic.toFixed(3), Gravado: true };
     });
   }
@@ -97,7 +99,7 @@ class FacturanteService {
       var data = res.data || '';
       var rawStr = String(data);
 
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         logger.error('CrearComprobante SOAP Fault: ' + faultString);
         throw new Error('Facturante SOAP Fault: ' + faultString);
@@ -162,7 +164,7 @@ class FacturanteService {
       var rawStr = String(res.data || '');
       logger.info('CrearAnulacionFull HTTP status=' + res.status + ' raw (primeros 1200): ' + rawStr.substring(0, 1200));
 
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         logger.error('CrearAnulacionFull SOAP Fault: ' + faultString);
         throw new Error('Facturante SOAP Fault: ' + faultString);
@@ -207,7 +209,7 @@ class FacturanteService {
       logger.info('DetalleComprobante HTTP status=' + res.status + ' raw (primeros 1500): ' + rawStr.substring(0, 1500));
 
       // Detectar Fault SOAP (error del servidor de Facturante)
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         logger.error('DetalleComprobante SOAP Fault: ' + faultString);
         throw new Error('Facturante SOAP Fault: ' + faultString);
@@ -221,9 +223,11 @@ class FacturanteService {
       // URLPDF: link al comprobante legal en PDF (con QR de AFIP) generado por Facturante
       var pdfUrl = this._extractTag(rawStr, 'URLPDF') || this._extractTag(rawStr, 'UrlPdf');
       if (pdfUrl) pdfUrl = pdfUrl.replace(/&amp;/g, '&');
+      // FechaHora: fecha de emision real del comprobante (necesaria para Asociados de NC)
+      var fechaEmision = this._extractTag(rawStr, 'FechaHora');
 
       logger.info('DetalleComprobante parsed: estado=' + estado + ' cae=' + cae + ' pdf=' + (pdfUrl ? 'si' : 'no') + ' msg=' + msg);
-      return { estado, cae, numero, mensaje: msg, pdfUrl: pdfUrl || null, raw: rawStr.substring(0, 2000) };
+      return { estado, cae, numero, mensaje: msg, pdfUrl: pdfUrl || null, fechaEmision: fechaEmision || null, raw: rawStr.substring(0, 2000) };
     } catch (err) {
       // Si es error de red (axios) registrar el cuerpo de respuesta si existe
       if (err.response) {
@@ -251,7 +255,7 @@ class FacturanteService {
       var res = await this._post('ListadoPuntosVenta', xml);
       var rawStr = String(res.data || '');
       logger.info('ListadoPuntosVenta HTTP status=' + res.status + ' raw (primeros 600): ' + rawStr.substring(0, 600));
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         throw new Error('Facturante SOAP Fault: ' + faultString);
       }
@@ -301,7 +305,7 @@ class FacturanteService {
       var res = await this._post('ReenviarComprobante', xml);
       var rawStr = String(res.data || '');
       logger.info('ReenviarComprobante HTTP status=' + res.status + ' raw (primeros 800): ' + rawStr.substring(0, 800));
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         throw new Error('Facturante SOAP Fault: ' + faultString);
       }
@@ -362,7 +366,7 @@ class FacturanteService {
       var res = await this._post('CrearComprobanteFull', xml);
       var rawStr = String(res.data || '');
       logger.info('CrearComprobanteFull raw (primeros 1200): ' + rawStr.substring(0, 1200));
-      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+      if (/<(?:[A-Za-z0-9]+:)?Fault[\s>]/.test(rawStr)) {
         var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
         throw new Error('Facturante SOAP Fault: ' + faultString);
       }

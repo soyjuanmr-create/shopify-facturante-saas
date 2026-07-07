@@ -87,7 +87,7 @@ const shopify = shopifyApi({
   scopes: (process.env.SCOPES || 'read_customers,read_orders,write_orders,read_products').split(','),
   hostName: (process.env.SHOPIFY_APP_URL || 'localhost:3000').replace(/https?:\/\//, ''),
   hostScheme: 'https',
-  apiVersion: ApiVersion.April25,
+  apiVersion: ApiVersion.October25,
   isEmbeddedApp: true,
   sessionStorage: customSessionStorage,
   billing: {

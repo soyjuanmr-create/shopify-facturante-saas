@@ -6,7 +6,7 @@ application_url = "https://shopifac-production.up.railway.app"
 embedded = true
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/shopify/gdpr"

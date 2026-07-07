@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
     try {
       const accessToken = await getValidAccessToken(shop.shopDomain, shop);
       const themeResp = await axios.post(
-        `https://${shop.shopDomain}/admin/api/2025-04/graphql.json`,
+        `https://${shop.shopDomain}/admin/api/2025-10/graphql.json`,
         { query: '{ themes(first: 1, roles: [MAIN]) { nodes { id } } }' },
         { headers: { 'X-Shopify-Access-Token': accessToken || shop.accessToken, 'Content-Type': 'application/json' } }
       );

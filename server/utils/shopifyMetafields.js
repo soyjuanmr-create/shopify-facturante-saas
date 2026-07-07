@@ -32,7 +32,7 @@ async function setInvoiceMetafields(session, orderId, data) {
       metafields.push({ ownerId, namespace: 'shopifac', key: 'invoice_error', type: 'single_line_text_field', value: data.error.substring(0, 255) });
     }
 
-    const url = 'https://' + session.shop + '/admin/api/2025-04/graphql.json';
+    const url = 'https://' + session.shop + '/admin/api/2025-10/graphql.json';
     const resp = await axios.post(url, { query: MUTATION, variables: { metafields } }, {
       headers: { 'X-Shopify-Access-Token': session.accessToken, 'Content-Type': 'application/json' },
     });
