@@ -236,6 +236,44 @@ class FacturanteService {
   }
 
   /**
+   * Lista los puntos de venta habilitados en la cuenta de Facturante.
+   * Sirve además para validar credenciales al guardarlas: si empresa/usuario/hash
+   * son incorrectos, Facturante responde con error y esto lanza.
+   * @returns {{ prefijos: string[] }} prefijos habilitados (ej. ["0001","0003"]).
+   */
+  async listarPuntosVenta() {
+    var body = '<fac:ListadoPuntosVenta><fac:request>' + this._auth() +
+      '<fac1:AutenticacionReseller i:nil="true"/>' +
+      '<fac1:Empresa>' + (parseInt(this.empresa, 10) || 0) + '</fac1:Empresa>' +
+      '</fac:request></fac:ListadoPuntosVenta>';
+    var xml = this._envelope('ListadoPuntosVenta', body);
+    try {
+      var res = await this._post('ListadoPuntosVenta', xml);
+      var rawStr = String(res.data || '');
+      logger.info('ListadoPuntosVenta HTTP status=' + res.status + ' raw (primeros 600): ' + rawStr.substring(0, 600));
+      if (rawStr.includes('Fault') || rawStr.includes('fault')) {
+        var faultString = this._extractTag(rawStr, 'faultstring') || this._extractTag(rawStr, 'Text') || 'SOAP Fault desconocido';
+        throw new Error('Facturante SOAP Fault: ' + faultString);
+      }
+      var estado = this._extractTag(rawStr, 'Estado');
+      var mensaje = this._extractTag(rawStr, 'Mensaje');
+      if (estado && estado.toUpperCase() !== 'OK') {
+        throw new Error(mensaje || ('Credenciales rechazadas por Facturante (estado ' + estado + ')'));
+      }
+      var prefijos = [];
+      var re = /<(?:[^>]*:)?Prefijo[^>]*>([^<]*)</g;
+      var m;
+      while ((m = re.exec(rawStr))) { if (m[1].trim()) prefijos.push(m[1].trim()); }
+      return { prefijos: prefijos, mensaje: mensaje };
+    } catch (err) {
+      if (err.response) {
+        throw new Error('Facturante HTTP ' + err.response.status + ': ' + (JSON.stringify(err.response.data || '')).substring(0, 200));
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Reenvía por email un comprobante ya emitido (operación ReenviarComprobante).
    * @param {string|number} idComprobante - IdComprobante de Facturante.
    * @param {string} [direcciones] - Emails extra separados por coma. Si se omite,

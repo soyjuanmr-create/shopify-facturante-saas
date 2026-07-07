@@ -57,7 +57,7 @@ export default function SettingsPage() {
       if (hash !== String.fromCharCode(8226).repeat(6)) body.hash = hash.trim();
       var r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(body) });
       if (r.success) {
-        if (typeof shopify !== 'undefined') shopify.toast.show('Configuracion guardada');
+        if (typeof shopify !== 'undefined') shopify.toast.show(r.verified ? 'Credenciales verificadas con Facturante' : 'Configuracion guardada');
         if (saveBarRef.current) saveBarRef.current.hide().catch(function() {});
         await load(); // Recargar desde DB para sincronizar estado con lo guardado
       } else setError(r.error || 'Error');
@@ -113,7 +113,8 @@ export default function SettingsPage() {
             <Box as="section" paddingInlineStart={{ xs: 400, sm: 0 }} paddingInlineEnd={{ xs: 400, sm: 0 }}>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">Credenciales de Facturante</Text>
-                <Text as="p" tone="subdued">Conecta tu cuenta de Facturante.com para emitir facturas electronicas.</Text>
+                <Text as="p" tone="subdued">Conecta tu cuenta de Facturante.com para emitir facturas electronicas. Al guardar, verificamos las credenciales contra Facturante.</Text>
+                <Text as="p" tone="subdued">Si todavia no tenes los datos de API, solicitalos a Facturante desde tu cuenta o escribiendo a su soporte.</Text>
               </BlockStack>
             </Box>
             <Card roundedAbove="sm" padding="400">
