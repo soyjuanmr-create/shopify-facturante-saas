@@ -1,7 +1,7 @@
 const axios = require('axios');
 const logger = require('./logger');
 
-const GRAPHQL_VERSION = '2025-04';
+const GRAPHQL_VERSION = '2025-10';
 
 async function shopifyGraphql(shopDomain, accessToken, query, variables) {
   const url = `https://${shopDomain}/admin/api/${GRAPHQL_VERSION}/graphql.json`;

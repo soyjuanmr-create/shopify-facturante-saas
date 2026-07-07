@@ -9,7 +9,7 @@ const { setInvoiceMetafields } = require('../utils/shopifyMetafields');
 const { getValidAccessToken } = require('../utils/tokenUtils');
 
 async function shopifyGraphql(shopDomain, accessToken, query, variables) {
-  const url = 'https://' + shopDomain + '/admin/api/2025-04/graphql.json';
+  const url = 'https://' + shopDomain + '/admin/api/2025-10/graphql.json';
   const body = variables ? { query, variables } : { query };
   try {
     const resp = await axios.post(url, body, {
@@ -122,6 +122,7 @@ router.post('/generate', async (req, res) => {
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
     const existing = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    if (existing && existing.shopId !== shop.id) return res.status(404).json({ error: 'Orden no encontrada.' });
     if (existing && existing.status === 'completed') return res.json({ success: true, message: 'Factura ya emitida. CAE: ' + existing.cae });
     const accessToken2 = await getValidAccessToken(shop.shopDomain, shop);
     if (!accessToken2) {
@@ -216,6 +217,13 @@ router.post('/generate', async (req, res) => {
       invoiceCae = resultado2.cae.toString();
       invoiceNumero = resultado2.numero ? resultado2.numero.toString() : null;
     }
+    // Al refacturar (ej. tras una anulacion) no perder el historial de NC previas:
+    // sus idComprobante/CAE viven en invoiceData y son la referencia al PDF de la NC.
+    if (existing && existing.invoiceData) {
+      var dataAnterior = typeof existing.invoiceData === 'string' ? JSON.parse(existing.invoiceData) : existing.invoiceData;
+      if (dataAnterior.creditNotes && !facturaData.creditNotes) facturaData.creditNotes = dataAnterior.creditNotes;
+      if (dataAnterior.creditNote && !facturaData.creditNote) facturaData.creditNote = dataAnterior.creditNote;
+    }
     // Mismo criterio de normalización que crearComprobante: cualquier tipo con 'A' → FA
     var tipoFinal = (facturaData.tipo_comprobante || 'FB').toUpperCase().indexOf('A') > -1 ? 'FA' : 'FB';
     await prisma.invoice.upsert({
@@ -239,11 +247,15 @@ router.post('/generate', async (req, res) => {
   }
 });
 
+// Ordenes con una NC en proceso (lock en memoria; el server corre en una sola instancia)
+var creditNotesInFlight = new Set();
+
 // Genera una Nota de Credito sobre una factura ya autorizada.
 // - mode 'total' (default): CrearAnulacionFull anula la factura completa (Facturante asocia la NC por Id).
 // - mode 'partial': CrearComprobanteFull con TipoComprobante NCA/NCB + bloque Asociados (exigido por AFIP),
 //   ya sea por items seleccionados o por un monto fijo.
 router.post('/credit-note', async (req, res) => {
+  var lockKey = null;
   try {
     const orderId = req.body.orderId;
     const mode = req.body.mode === 'partial' ? 'partial' : 'total';
@@ -252,7 +264,15 @@ router.post('/credit-note', async (req, res) => {
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Configura tus credenciales de Facturante primero.' });
 
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    // Lock en memoria: evita emitir dos NC legales por doble click / requests concurrentes.
+    // lockKey solo se asigna si ESTE request tomo el lock (el finally no debe soltar el ajeno).
+    var key = orderId.toString();
+    if (creditNotesInFlight.has(key)) return res.status(409).json({ error: 'Ya hay una nota de credito en proceso para esta orden. Espera unos segundos.' });
+    creditNotesInFlight.add(key);
+    lockKey = key;
+
+    // findFirst con shopId: una tienda solo puede operar sobre SUS facturas
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: orderId.toString(), shopId: shop.id } });
     if (!invoice) return res.status(404).json({ error: 'No existe una factura registrada para esta orden.' });
     if (invoice.status === 'cancelled') return res.json({ success: true, message: 'Esta factura ya tiene una nota de credito total emitida.' });
     if (invoice.status !== 'completed') return res.status(400).json({ error: 'Solo se puede acreditar una factura autorizada (con CAE). Estado actual: ' + invoice.status });
@@ -277,6 +297,7 @@ router.post('/credit-note', async (req, res) => {
       if (!prevData.items || !prevData.cliente) return res.status(400).json({ error: 'No hay datos de la factura original para armar la NC parcial. Emite la NC total desde Facturante.' });
 
       var ncItems = [];
+      var ncImporte = 0; // importe bruto estimado de la NC, para el tope acumulado
       var reqItems = Array.isArray(req.body.items) ? req.body.items : [];
       var amount = parseFloat(req.body.amount);
       if (reqItems.length > 0) {
@@ -286,6 +307,9 @@ router.post('/credit-note', async (req, res) => {
           if (!orig) return res.status(400).json({ error: 'Item invalido en la seleccion (indice ' + sel.index + ').' });
           var cant = parseFloat(sel.cantidad);
           if (!(cant > 0) || cant > (parseFloat(orig.cantidad) || 1)) return res.status(400).json({ error: 'Cantidad invalida para "' + orig.descripcion + '" (max ' + orig.cantidad + ').' });
+          var alicItem = parseFloat(orig.alicuota_iva); if (isNaN(alicItem)) alicItem = 21;
+          var bonItem = parseFloat(orig.bonificacion) || 0;
+          ncImporte += cant * (parseFloat(orig.precio_unitario) || 0) * (1 + alicItem / 100) * (1 - bonItem / 100);
           ncItems.push({ codigo: orig.codigo, descripcion: orig.descripcion, cantidad: cant, precio_unitario: orig.precio_unitario, alicuota_iva: orig.alicuota_iva, bonificacion: orig.bonificacion });
         }
       } else if (amount > 0) {
@@ -294,17 +318,40 @@ router.post('/credit-note', async (req, res) => {
         var alic = parseFloat(prevData.items[0].alicuota_iva);
         if (isNaN(alic)) alic = 21;
         var neto = alic > 0 ? amount / (1 + alic / 100) : amount;
+        ncImporte = amount;
         ncItems.push({ codigo: 'NC-PARCIAL', descripcion: (req.body.amountDescription || 'Devolucion parcial orden ' + invoice.shopifyOrderNumber).substring(0, 250), cantidad: 1, precio_unitario: neto.toFixed(3), alicuota_iva: alic, bonificacion: '0.000' });
       } else {
         return res.status(400).json({ error: 'Indica los items a acreditar o un monto valido.' });
+      }
+
+      // Tope: lo acreditado (esta NC + las anteriores) no puede superar el total facturado.
+      // Tolerancia 1% por redondeos de IVA/bonificaciones.
+      var yaAcreditado = (Array.isArray(prevData.creditNotes) ? prevData.creditNotes : [])
+        .reduce(function (sum, nc) { return sum + (parseFloat(nc.importe) || 0); }, 0);
+      if (invoice.totalAmount > 0 && (yaAcreditado + ncImporte) > invoice.totalAmount * 1.01) {
+        var disponible = Math.max(0, invoice.totalAmount - yaAcreditado);
+        return res.status(400).json({ error: 'El importe a acreditar ($' + ncImporte.toFixed(2) + ') supera lo disponible de la factura ($' + disponible.toFixed(2) + ' de $' + invoice.totalAmount.toFixed(2) + (yaAcreditado > 0 ? ', ya acreditado $' + yaAcreditado.toFixed(2) : '') + ').' });
       }
 
       var tipoOriginal = invoice.tipoComprobante || ((prevData.tipo_comprobante || 'FB').toUpperCase().indexOf('A') > -1 ? 'FA' : 'FB');
       // Numero AFIP del comprobante asociado: ultimo grupo numerico (puede venir "0003-00012345")
       var numMatch = String(invoice.facturanteInvoiceNumber).match(/(\d+)\s*$/);
       if (!numMatch) return res.status(400).json({ error: 'Numero de comprobante original invalido: ' + invoice.facturanteInvoiceNumber });
+      // Fecha de emision REAL del comprobante original (AFIP la exige en Asociados):
+      // se consulta a Facturante; processedAt es la fecha de confirmacion, no de emision.
+      var fechaOriginal = invoice.processedAt || invoice.createdAt;
+      try {
+        var detalleOrig = await facturante.consultarComprobante(invoice.facturanteInvoiceId);
+        if (detalleOrig.fechaEmision) fechaOriginal = detalleOrig.fechaEmision;
+        // Aprovechar para cachear el PDF si aun no lo teniamos
+        if (detalleOrig.pdfUrl && !invoice.pdfUrl) {
+          await prisma.invoice.update({ where: { id: invoice.id }, data: { pdfUrl: detalleOrig.pdfUrl } });
+        }
+      } catch (e) {
+        logger.warn('credit-note: no se pudo obtener la fecha de emision original (' + e.message + '), usando processedAt');
+      }
       var asociado = {
-        fecha: invoice.processedAt || invoice.createdAt,
+        fecha: fechaOriginal,
         numero: parseInt(numMatch[1], 10),
         puntoVenta: parseInt(shop.puntoVenta || '1', 10),
         tipo: tipoOriginal,
@@ -323,7 +370,7 @@ router.post('/credit-note', async (req, res) => {
       }
     }
 
-    var ncRecord = { tipo: mode, cae: result.cae || null, numero: result.numero || null, idComprobante: result.idComprobante || null, fecha: new Date().toISOString(), mensaje: result.mensaje || null };
+    var ncRecord = { tipo: mode, importe: mode === 'total' ? invoice.totalAmount : Math.round(ncImporte * 100) / 100, cae: result.cae || null, numero: result.numero || null, idComprobante: result.idComprobante || null, fecha: new Date().toISOString(), mensaje: result.mensaje || null };
     if (!Array.isArray(prevData.creditNotes)) prevData.creditNotes = [];
     prevData.creditNotes.push(ncRecord);
     if (mode === 'total') prevData.creditNote = ncRecord; // compat con registros anteriores
@@ -352,6 +399,8 @@ router.post('/credit-note', async (req, res) => {
     logger.error('Credit-note error inesperado: ' + error.message);
     if (error.authRequired) return res.status(403).json({ error: 'Token de acceso expirado. Reabri la app desde el admin de Shopify.', authRequired: true });
     res.status(500).json({ error: error.message });
+  } finally {
+    if (lockKey) creditNotesInFlight.delete(lockKey);
   }
 });
 
@@ -364,7 +413,7 @@ router.post('/sync-status/:orderId', async (req, res) => {
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Credenciales de Facturante no configuradas.' });
 
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: orderId.toString(), shopId: shop.id } });
     if (!invoice) {
       // No hay registro local — la orden aun no fue enviada a Facturante
       return res.status(404).json({ error: 'No existe un comprobante registrado para esta orden. Usa "Facturar" primero.' });
@@ -444,7 +493,7 @@ router.get('/pdf/:orderId', async (req, res) => {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Credenciales de Facturante no configuradas.' });
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: req.params.orderId.toString() } });
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: req.params.orderId.toString(), shopId: shop.id } });
     if (!invoice) return res.status(404).json({ error: 'No existe un comprobante para esta orden.' });
 
     const data = invoice.invoiceData ? (typeof invoice.invoiceData === 'string' ? JSON.parse(invoice.invoiceData) : invoice.invoiceData) : {};
@@ -492,7 +541,7 @@ router.post('/resend-email', async (req, res) => {
     const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
     if (!shop || shop.status !== 'active') return res.status(403).json({ error: 'Tienda no activa' });
     if (!shop.empresa || !shop.hash) return res.status(400).json({ error: 'Credenciales de Facturante no configuradas.' });
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: orderId.toString() } });
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: orderId.toString(), shopId: shop.id } });
     if (!invoice || !invoice.facturanteInvoiceId) return res.status(404).json({ error: 'No existe un comprobante emitido para esta orden.' });
 
     var emails = (req.body.emails || '').split(',').map(function (e) { return e.trim(); }).filter(Boolean);
@@ -516,7 +565,9 @@ router.post('/resend-email', async (req, res) => {
 // Items de la factura original, para armar la NC parcial desde el cliente.
 router.get('/credit-note-info/:orderId', async (req, res) => {
   try {
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: req.params.orderId.toString() } });
+    const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!shop) return res.status(403).json({ error: 'Tienda no activa' });
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: req.params.orderId.toString(), shopId: shop.id } });
     if (!invoice) return res.status(404).json({ error: 'No existe una factura para esta orden.' });
     const data = invoice.invoiceData ? (typeof invoice.invoiceData === 'string' ? JSON.parse(invoice.invoiceData) : invoice.invoiceData) : {};
     res.json({
@@ -570,7 +621,12 @@ router.get('/list', async (req, res) => {
     ]);
 
     if (isCsv) {
-      var esc = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      var esc = function (v) {
+        v = v == null ? '' : String(v);
+        // Prefijo ' contra formula injection en Excel (nombres/emails vienen del checkout)
+        if (/^[=+\-@]/.test(v)) v = "'" + v;
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      };
       var header = 'Orden,Cliente,Email,Tipo,Numero,CAE,Total,Estado,Fecha emision,Fecha orden';
       var lines = rows.map(function (r) {
         return [r.shopifyOrderNumber, r.customerName, r.customerEmail, r.tipoComprobante, r.facturanteInvoiceNumber, r.cae, r.totalAmount, r.status, r.processedAt ? r.processedAt.toISOString().slice(0, 10) : '', r.createdAt.toISOString().slice(0, 10)].map(esc).join(',');
@@ -590,7 +646,9 @@ router.get('/list', async (req, res) => {
 
 router.get('/status/:orderId', async (req, res) => {
   try {
-    const invoice = await prisma.invoice.findUnique({ where: { shopifyOrderId: req.params.orderId.toString() } });
+    const shop = await prisma.shop.findUnique({ where: { shopDomain: req.shopDomain } });
+    if (!shop) return res.json({ exists: false });
+    const invoice = await prisma.invoice.findFirst({ where: { shopifyOrderId: req.params.orderId.toString(), shopId: shop.id } });
     if (!invoice) return res.json({ exists: false });
     res.json({ exists: true, status: invoice.status, cae: invoice.cae, invoiceNumber: invoice.facturanteInvoiceNumber });
   } catch (error) { res.status(500).json({ error: error.message }); }

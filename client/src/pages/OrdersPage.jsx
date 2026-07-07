@@ -20,6 +20,7 @@ export default function OrdersPage() {
   const [ncInfo, setNcInfo] = useState(null);
   const [ncSelection, setNcSelection] = useState({});
   const [ncAmount, setNcAmount] = useState('');
+  const [ncError, setNcError] = useState(null);
   const [resendId, setResendId] = useState(null);
   const [resendEmails, setResendEmails] = useState('');
   const [resending, setResending] = useState(false);
@@ -69,7 +70,7 @@ export default function OrdersPage() {
   }, [fetch, confirmId, tipoComp, loadOrders, search]);
 
   const openCreditModal = useCallback(async (orderId) => {
-    setNcMode(['total']); setNcSelection({}); setNcAmount(''); setNcInfo(null);
+    setNcMode(['total']); setNcSelection({}); setNcAmount(''); setNcInfo(null); setNcError(null);
     setCreditId(orderId);
     try {
       var info = await fetch('/api/invoices/credit-note-info/' + orderId);
@@ -80,16 +81,19 @@ export default function OrdersPage() {
   const handleCreditNote = useCallback(async () => {
     var id = creditId; var mode = ncMode[0];
     var body = { orderId: id };
+    setNcError(null);
     if (mode === 'items') {
       body.mode = 'partial';
-      body.items = Object.keys(ncSelection)
-        .filter(idx => ncSelection[idx] && ncSelection[idx].checked && parseFloat(ncSelection[idx].cantidad) > 0)
-        .map(idx => ({ index: parseInt(idx, 10), cantidad: parseFloat(ncSelection[idx].cantidad) }));
-      if (body.items.length === 0) { setError('Selecciona al menos un item para acreditar.'); return; }
+      var seleccionados = Object.keys(ncSelection).filter(idx => ncSelection[idx] && ncSelection[idx].checked);
+      // Un item marcado con cantidad vacia/invalida es un error, no se descarta en silencio
+      var invalido = seleccionados.find(idx => !(parseFloat(ncSelection[idx].cantidad) > 0));
+      if (invalido !== undefined) { setNcError('Revisa la cantidad de los items seleccionados: debe ser mayor a 0.'); return; }
+      body.items = seleccionados.map(idx => ({ index: parseInt(idx, 10), cantidad: parseFloat(ncSelection[idx].cantidad) }));
+      if (body.items.length === 0) { setNcError('Selecciona al menos un item para acreditar.'); return; }
     } else if (mode === 'amount') {
       body.mode = 'partial';
       body.amount = parseFloat(ncAmount);
-      if (!(body.amount > 0)) { setError('Indica un monto valido.'); return; }
+      if (!(body.amount > 0)) { setNcError('Indica un monto valido.'); return; }
     }
     setCreditId(null); setCreditingId(id); setError(null); setSuccess(null);
     try {
@@ -264,6 +268,7 @@ export default function OrdersPage() {
             <Modal open={!!creditId} onClose={() => setCreditId(null)} title="Emitir nota de credito" primaryAction={{ content: 'Emitir nota de credito', destructive: true, onAction: handleCreditNote }} secondaryActions={[{ content: 'Cancelar', onAction: () => setCreditId(null) }]}>
               <Modal.Section>
                 <BlockStack gap="300">
+                  {ncError && <Banner tone="critical" onDismiss={() => setNcError(null)}><p>{ncError}</p></Banner>}
                   <Text>Nota de credito sobre la factura {creditOrder ? 'de la orden #' + creditOrder.order_number : ''}.</Text>
                   <ChoiceList
                     title="Alcance"

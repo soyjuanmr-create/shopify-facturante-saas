@@ -64,7 +64,7 @@ app.get('/api/auth/callback', async function (req, res) {
     try {
       var axios = require('axios');
       var planResp = await axios.post(
-        'https://' + session.shop + '/admin/api/2025-04/graphql.json',
+        'https://' + session.shop + '/admin/api/2025-10/graphql.json',
         { query: '{ shop { plan { shopifyPlus } } }' },
         { headers: { 'X-Shopify-Access-Token': session.accessToken, 'Content-Type': 'application/json' } }
       );
@@ -89,7 +89,7 @@ app.get('/api/auth/callback', async function (req, res) {
       try {
         const billingCheck = await shopify.billing.check({
           session: session,
-          plans: [billingMw.PLAN],
+          plans: billingMw.PLANES_VALIDOS,
           isTest: billingMw.isTestBilling(),
         });
         if (!billingCheck.hasActivePayment) {
