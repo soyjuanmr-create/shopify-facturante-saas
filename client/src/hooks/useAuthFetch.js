@@ -9,6 +9,11 @@ export function useAuthFetch() {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (res.status === 402 && err.billingRequired && err.confirmationUrl) {
+        // Sin suscripcion activa: llevar al merchant a aprobar el plan (con trial)
+        window.open(err.confirmationUrl, '_top');
+        return new Promise(() => { }); // Freeze execution while redirecting
+      }
       if (res.status === 403 && err.authRequired) {
         // Extraer shop del JWT (dest claim) — más confiable que URL params o shopify.config
         let shop = null;

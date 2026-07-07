@@ -19,6 +19,7 @@ var logger = require('./utils/logger');
 var errorHandler = require('./middleware/errorHandler');
 var rateLimiter = require('./middleware/rateLimiter');
 var authMw = require('./middleware/auth');
+var billingMw = require('./middleware/billing');
 var settingsRoutes = require('./routes/settings');
 var invoiceRoutes = require('./routes/invoices');
 var printRoutes = require('./routes/print');
@@ -82,27 +83,32 @@ app.get('/api/auth/callback', async function (req, res) {
     // Activar extensión checkout DNI solo para merchants Plus (fire-and-forget)
     if (isPlus) activateCheckoutExtension(session.shop, session.accessToken);
 
-    // Billing: verificar si el merchant tiene un plan activo
-    try {
-      const isTest = process.env.NODE_ENV !== 'production';
-      const billingCheck = await shopify.billing.check({
-        session: session,
-        plans: ['SaaS Plan'],
-        isTest: isTest,
-      });
-      if (!billingCheck.hasActivePayment) {
-        logger.info('Billing: merchant ' + session.shop + ' sin plan activo, redirigiendo a checkout...');
-        const billingResponse = await shopify.billing.request({
+    // Billing: si BILLING_REQUIRED=true (app publica), el merchant debe aceptar la
+    // suscripcion (14 dias de trial) antes de entrar a la app.
+    if (billingMw.billingRequired() && !billingMw.isExempt(session.shop)) {
+      try {
+        const billingCheck = await shopify.billing.check({
           session: session,
-          plan: 'SaaS Plan',
-          isTest: isTest,
+          plans: [billingMw.PLAN],
+          isTest: billingMw.isTestBilling(),
         });
-        return res.redirect(billingResponse.confirmationUrl);
+        if (!billingCheck.hasActivePayment) {
+          logger.info('Billing: merchant ' + session.shop + ' sin plan activo, redirigiendo a checkout...');
+          const billingResponse = await shopify.billing.request({
+            session: session,
+            plan: billingMw.PLAN,
+            isTest: billingMw.isTestBilling(),
+            returnUrl: (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '') + '/?shop=' + encodeURIComponent(session.shop),
+          });
+          return res.redirect(billingResponse.confirmationUrl);
+        }
+        await prisma.shop.update({ where: { shopDomain: session.shop }, data: { billingActive: true, billingCheckedAt: new Date() } });
+        logger.info('Billing: merchant ' + session.shop + ' tiene plan activo.');
+      } catch (billingErr) {
+        // Fail-open ante errores transitorios de la API: el middleware requireBilling
+        // vuelve a exigir la suscripcion en el proximo request.
+        logger.warn('Billing check error en OAuth (dejando pasar): ' + billingErr.message);
       }
-      logger.info('Billing: merchant ' + session.shop + ' tiene plan activo.');
-    } catch (billingErr) {
-      // Si falla el check de billing, dejar pasar (no bloquear al merchant)
-      logger.warn('Billing check error (no bloqueante): ' + billingErr.message);
     }
 
     var host = req.query.host || '';
@@ -110,8 +116,8 @@ app.get('/api/auth/callback', async function (req, res) {
   } catch (error) { logger.error('OAuth error: ' + error.message); res.status(500).send('Auth error: ' + error.message); }
 });
 
-app.use('/api/settings', authMw.verifyToken, settingsRoutes);
-app.use('/api/invoices', authMw.verifyToken, invoiceRoutes);
+app.use('/api/settings', authMw.verifyToken, billingMw.requireBilling, settingsRoutes);
+app.use('/api/invoices', authMw.verifyToken, billingMw.requireBilling, invoiceRoutes);
 app.use('/api/print', printRoutes);
 
 var distPath = path.join(__dirname, '../client/dist');

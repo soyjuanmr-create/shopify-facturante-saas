@@ -91,11 +91,13 @@ const shopify = shopifyApi({
   isEmbeddedApp: true,
   sessionStorage: customSessionStorage,
   billing: {
-    'SaaS Plan': {
-      amount: 35.00,
+    // Plan unico de la app publica. El cobro se exige solo si BILLING_REQUIRED=true
+    // (Railway de la app publica); la app privada no define esa variable y nunca cobra.
+    'Plan Shopifac': {
+      amount: 14.99,
       currencyCode: 'USD',
       interval: BillingInterval.Every30Days,
-      trialDays: 7,
+      trialDays: 14,
     }
   }
 });
